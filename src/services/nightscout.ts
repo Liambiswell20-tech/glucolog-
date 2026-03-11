@@ -66,6 +66,18 @@ export async function fetchLatestGlucose(): Promise<GlucoseReading> {
   };
 }
 
+// Fetch average mmol/L over the last 12 hours (up to 150 readings at 5-min intervals)
+export async function fetchAverage12h(): Promise<number | null> {
+  const fromMs = Date.now() - 12 * 60 * 60 * 1000;
+  const url = `${NIGHTSCOUT_URL}?count=150&token=${TOKEN}&find[date][$gte]=${fromMs}`;
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  const entries: GlucoseEntry[] = await response.json();
+  if (!entries || entries.length === 0) return null;
+  const avg = entries.reduce((sum, e) => sum + e.sgv, 0) / entries.length;
+  return Math.round((avg / 18) * 10) / 10;
+}
+
 // Fetch all readings between two epoch-ms timestamps (up to 100 readings = ~8hrs)
 export async function fetchGlucoseRange(fromMs: number, toMs: number): Promise<CurvePoint[]> {
   const url =

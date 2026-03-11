@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import GlucoseDisplay from '../components/GlucoseDisplay';
-import { fetchLatestGlucose, GlucoseReading } from '../services/nightscout';
+import { fetchLatestGlucose, fetchAverage12h, GlucoseReading } from '../services/nightscout';
 import { fetchAndStoreCurve, saveMeal } from '../services/storage';
 import type { RootStackParamList } from '../../App';
 
@@ -28,20 +28,25 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avg12h, setAvg12h] = useState<number | null>(null);
 
-  // Quick log modal state
+  // Quick log modal
   const [quickLogVisible, setQuickLogVisible] = useState(false);
   const [snackName, setSnackName] = useState('');
   const [snackUnits, setSnackUnits] = useState('');
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
 
-  const loadReading = useCallback(async (isRefresh = false) => {
+  const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     setError(null);
     try {
-      const data = await fetchLatestGlucose();
+      const [data, avg] = await Promise.all([
+        fetchLatestGlucose(),
+        fetchAverage12h(),
+      ]);
       setReading(data);
+      setAvg12h(avg);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load glucose');
     } finally {
@@ -51,16 +56,15 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    loadReading();
-    const interval = setInterval(() => loadReading(), POLL_INTERVAL_MS);
+    loadData();
+    const interval = setInterval(() => loadData(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [loadReading]);
+  }, [loadData]);
 
   function openQuickLog() {
     setSnackName('');
     setSnackUnits('');
     setQuickLogVisible(true);
-    // Focus name field after modal animates in
     setTimeout(() => nameInputRef.current?.focus(), 300);
   }
 
@@ -74,22 +78,16 @@ export default function HomeScreen() {
       Alert.alert('Invalid units', 'Enter a number or leave blank for 0');
       return;
     }
-
     setSaving(true);
     try {
       let startGlucose: number | null = null;
-      try {
-        const r = await fetchLatestGlucose();
-        startGlucose = r.mmol;
-      } catch {}
-
+      try { const r = await fetchLatestGlucose(); startGlucose = r.mmol; } catch {}
       const meal = await saveMeal({
         name: snackName.trim(),
         photoUri: null,
         insulinUnits: isNaN(units) ? 0 : units,
         startGlucose,
       });
-
       fetchAndStoreCurve(meal.id).catch(() => {});
       setQuickLogVisible(false);
     } catch {
@@ -104,15 +102,21 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadReading(true)}
-            tintColor="#8E8E93"
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor="#8E8E93" />
         }
       >
-        <Text style={styles.header}>GlucoLog</Text>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>GlucoLog</Text>
+            <Text style={styles.headerSub}>Your glucose memory</Text>
+          </View>
+          <Pressable style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')} hitSlop={12}>
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </Pressable>
+        </View>
 
+        {/* Glucose card */}
         <View style={styles.card}>
           {loading && !reading ? (
             <ActivityIndicator size="large" color="#30D158" />
@@ -127,6 +131,24 @@ export default function HomeScreen() {
           ) : null}
         </View>
 
+        {/* 12hr average box */}
+        <View style={styles.avgBox}>
+          <View style={styles.avgLeft}>
+            <Text style={styles.avgLabel}>12hr average</Text>
+            {avg12h !== null ? (
+              <Text style={[
+                styles.avgValue,
+                { color: avg12h < 3.9 ? '#FF3B30' : avg12h > 10 ? '#FF9500' : '#30D158' }
+              ]}>
+                {avg12h.toFixed(1)}
+              </Text>
+            ) : (
+              <Text style={styles.avgValue}>—</Text>
+            )}
+          </View>
+          <Text style={styles.avgUnit}>mmol/L</Text>
+        </View>
+
         {/* Primary actions */}
         <View style={styles.actionRow}>
           <Pressable style={styles.logMealBtn} onPress={() => navigation.navigate('MealLog')}>
@@ -137,24 +159,52 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Quick log */}
+        {/* Quick log snack */}
         <Pressable style={styles.quickLogBtn} onPress={openQuickLog}>
           <Text style={styles.quickLogBtnText}>⚡ Quick log snack</Text>
         </Pressable>
 
+        {/* Insulin / tablet row — 3 buttons */}
+        <View style={styles.insulinRow}>
+          <Pressable
+            style={styles.insulinBtn}
+            onPress={() => navigation.navigate('InsulinLog', { type: 'long-acting' })}
+          >
+            <Text style={styles.insulinBtnEmoji}>❤️</Text>
+            <Text style={styles.insulinBtnText}>Long-acting</Text>
+          </Pressable>
+          <Pressable
+            style={styles.insulinBtn}
+            onPress={() => navigation.navigate('InsulinLog', { type: 'correction' })}
+          >
+            <Text style={styles.insulinBtnEmoji}>💉</Text>
+            <Text style={styles.insulinBtnText}>Correction</Text>
+          </Pressable>
+          <Pressable
+            style={styles.insulinBtn}
+            onPress={() => navigation.navigate('InsulinLog', { type: 'tablets' })}
+          >
+            <Text style={styles.insulinBtnEmoji}>💊</Text>
+            <Text style={styles.insulinBtnText}>Tablets</Text>
+          </Pressable>
+        </View>
+
+        {/* Compact range guide */}
         <View style={styles.rangeKey}>
           <Text style={styles.rangeKeyTitle}>Range guide</Text>
-          <View style={styles.rangeRow}>
-            <View style={[styles.dot, { backgroundColor: '#FF3B30' }]} />
-            <Text style={styles.rangeLabel}>Low  &lt; 3.9</Text>
-          </View>
-          <View style={styles.rangeRow}>
-            <View style={[styles.dot, { backgroundColor: '#30D158' }]} />
-            <Text style={styles.rangeLabel}>In range  3.9 – 10.0</Text>
-          </View>
-          <View style={styles.rangeRow}>
-            <View style={[styles.dot, { backgroundColor: '#FF9500' }]} />
-            <Text style={styles.rangeLabel}>High  &gt; 10.0</Text>
+          <View style={styles.rangeCompactRow}>
+            <View style={styles.rangeCompactItem}>
+              <View style={[styles.dot, { backgroundColor: '#FF3B30' }]} />
+              <Text style={styles.rangeLabel}>Low &lt;3.9</Text>
+            </View>
+            <View style={styles.rangeCompactItem}>
+              <View style={[styles.dot, { backgroundColor: '#30D158' }]} />
+              <Text style={styles.rangeLabel}>In range 3.9–10</Text>
+            </View>
+            <View style={styles.rangeCompactItem}>
+              <View style={[styles.dot, { backgroundColor: '#FF9500' }]} />
+              <Text style={styles.rangeLabel}>High &gt;10</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -167,14 +217,10 @@ export default function HomeScreen() {
         onRequestClose={() => setQuickLogVisible(false)}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setQuickLogVisible(false)} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalWrapper}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalWrapper}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Quick log snack</Text>
-
             <Text style={styles.label}>What did you eat?</Text>
             <TextInput
               ref={nameInputRef}
@@ -185,7 +231,6 @@ export default function HomeScreen() {
               onChangeText={setSnackName}
               returnKeyType="next"
             />
-
             <Text style={styles.label}>Insulin units</Text>
             <TextInput
               style={styles.input}
@@ -197,16 +242,12 @@ export default function HomeScreen() {
               returnKeyType="done"
               onSubmitEditing={handleQuickSave}
             />
-
             <Pressable
               style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
               onPress={handleQuickSave}
               disabled={saving}
             >
-              {saving
-                ? <ActivityIndicator color="#000" />
-                : <Text style={styles.saveBtnText}>Save snack</Text>
-              }
+              {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.saveBtnText}>Save snack</Text>}
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -220,137 +261,166 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: '#000',
     alignItems: 'center',
-    paddingTop: 64,
+    paddingTop: 56,
     paddingBottom: 40,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
-  header: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#8E8E93',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 40,
+
+  // Header
+  headerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
   },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  headerSub: {
+    fontSize: 12,
+    color: '#636366',
+    marginTop: 1,
+  },
+  settingsBtn: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsIcon: { fontSize: 18 },
+
+  // Glucose card
   card: {
     width: '100%',
     backgroundColor: '#1C1C1E',
     borderRadius: 24,
-    padding: 40,
+    padding: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 200,
-    marginBottom: 24,
+    minHeight: 180,
+    marginBottom: 12,
   },
   errorContainer: { alignItems: 'center', gap: 8 },
   errorIcon: { fontSize: 36, color: '#FF3B30' },
   errorText: { fontSize: 16, color: '#FF3B30', textAlign: 'center' },
   errorHint: { fontSize: 13, color: '#8E8E93' },
-  actionRow: {
+
+  // 12hr average
+  avgBox: {
     width: '100%',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
+  avgLeft: { gap: 2 },
+  avgLabel: { fontSize: 12, color: '#636366', textTransform: 'uppercase', letterSpacing: 0.8 },
+  avgValue: { fontSize: 28, fontWeight: '700', color: '#8E8E93' },
+  avgUnit: { fontSize: 14, color: '#636366' },
+
+  // Actions
+  actionRow: { width: '100%', flexDirection: 'row', gap: 10, marginBottom: 10 },
   logMealBtn: {
     flex: 1,
     backgroundColor: '#1C1C1E',
     borderRadius: 14,
-    padding: 18,
+    padding: 16,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#30D158',
   },
-  logMealBtnText: { color: '#30D158', fontSize: 17, fontWeight: '600' },
+  logMealBtnText: { color: '#30D158', fontSize: 16, fontWeight: '600' },
   historyBtn: {
     backgroundColor: '#1C1C1E',
     borderRadius: 14,
-    paddingHorizontal: 20,
-    padding: 18,
+    paddingHorizontal: 18,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  historyBtnText: { color: '#8E8E93', fontSize: 17, fontWeight: '600' },
+  historyBtnText: { color: '#8E8E93', fontSize: 16, fontWeight: '600' },
+
+  // Quick log
   quickLogBtn: {
     width: '100%',
     backgroundColor: '#1C1C1E',
     borderRadius: 14,
-    padding: 16,
+    padding: 14,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 10,
   },
-  quickLogBtnText: { color: '#FF9F0A', fontSize: 16, fontWeight: '600' },
+  quickLogBtnText: { color: '#FF9F0A', fontSize: 15, fontWeight: '600' },
+
+  // Insulin row — 3 buttons
+  insulinRow: { width: '100%', flexDirection: 'row', gap: 10, marginBottom: 16 },
+  insulinBtn: {
+    flex: 1,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 5,
+  },
+  insulinBtnEmoji: { fontSize: 20 },
+  insulinBtnText: { color: '#8E8E93', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+
+  // Compact range guide
   rangeKey: {
     width: '100%',
     backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-    padding: 20,
-    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   rangeKeyTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: '#636366',
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginBottom: 4,
   },
-  rangeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  rangeLabel: { fontSize: 15, color: '#EBEBF5' },
+  rangeCompactRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  rangeCompactItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  rangeLabel: { fontSize: 12, color: '#8E8E93' },
 
   // Modal
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  modalWrapper: {
-    justifyContent: 'flex-end',
-  },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalWrapper: { justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: '#1C1C1E',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     paddingBottom: 40,
-    gap: 0,
   },
   modalHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#48484A',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
+    width: 36, height: 4, backgroundColor: '#48484A',
+    borderRadius: 2, alignSelf: 'center', marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 24,
-  },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 24 },
   label: {
-    color: '#8E8E93',
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
+    color: '#8E8E93', fontSize: 13, fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8,
   },
   input: {
-    backgroundColor: '#2C2C2E',
-    color: '#FFFFFF',
-    fontSize: 17,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: '#2C2C2E', color: '#FFFFFF',
+    fontSize: 17, padding: 16, borderRadius: 12, marginBottom: 20,
   },
   saveBtn: {
-    backgroundColor: '#FF9F0A',
-    borderRadius: 14,
-    padding: 18,
-    alignItems: 'center',
-    marginTop: 4,
+    backgroundColor: '#FF9F0A', borderRadius: 14,
+    padding: 18, alignItems: 'center', marginTop: 4,
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#000', fontSize: 17, fontWeight: '700' },
