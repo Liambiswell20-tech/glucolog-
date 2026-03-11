@@ -88,13 +88,16 @@ export async function fetchAndStoreBasalCurve(logId: string): Promise<void> {
 }
 
 export interface GlucoseResponse {
-  startGlucose: number;    // mmol/L at start of session
-  peakGlucose: number;     // mmol/L highest in 3hr window
-  timeToPeakMins: number;  // minutes from session start to peak
-  totalRise: number;       // peak minus start
-  readings: CurvePoint[];  // full curve
-  isPartial: boolean;      // true if 3hr window not yet complete
-  fetchedAt: string;       // ISO
+  startGlucose: number;       // mmol/L at start of session
+  peakGlucose: number;        // mmol/L highest in 3hr window
+  timeToPeakMins: number;     // minutes from session start to peak
+  totalRise: number;          // peak minus start
+  endGlucose: number;         // mmol/L at end of window (or latest reading)
+  fallFromPeak: number;       // peak minus end (positive = came back down)
+  timeFromPeakToEndMins: number; // minutes from peak to end reading
+  readings: CurvePoint[];     // full curve
+  isPartial: boolean;         // true if 3hr window not yet complete
+  fetchedAt: string;          // ISO
 }
 
 export type SessionConfidence = 'high' | 'medium' | 'low';
@@ -170,10 +173,19 @@ export async function saveMeal(
     sessionId: null,
   };
 
-  // Find any meals logged within the last 3 hours
-  const recentMeals = meals.filter(
-    m => now.getTime() - new Date(m.loggedAt).getTime() <= THREE_HOURS_MS
+  // Sessions that started within the last 3 hours are still "open"
+  const activeSessions = new Set(
+    sessions
+      .filter(s => now.getTime() - new Date(s.startedAt).getTime() <= THREE_HOURS_MS)
+      .map(s => s.id)
   );
+
+  // Only consider meals that are recent AND belong to an open session (or no session yet)
+  const recentMeals = meals.filter(m => {
+    const withinWindow = now.getTime() - new Date(m.loggedAt).getTime() <= THREE_HOURS_MS;
+    const sessionOpen = m.sessionId === null || activeSessions.has(m.sessionId);
+    return withinWindow && sessionOpen;
+  });
 
   let session: Session;
 
@@ -187,11 +199,11 @@ export async function saveMeal(
       glucoseResponse: null,
     };
   } else {
-    // Find if any recent meal already belongs to a session
+    // Find if any eligible recent meal already belongs to an open session
     const existingSessionId = recentMeals.find(m => m.sessionId)?.sessionId ?? null;
 
     if (existingSessionId) {
-      // Add to existing session
+      // Add to existing open session
       const existing = sessions.find(s => s.id === existingSessionId)!;
       const updatedIds = [...existing.mealIds, newMeal.id];
       session = {
@@ -200,7 +212,7 @@ export async function saveMeal(
         confidence: computeConfidence(updatedIds.length),
       };
     } else {
-      // No session yet — group all recent meals + this one into a new session
+      // No session yet — group eligible recent meals + this one into a new session
       const allIds = [...recentMeals.map(m => m.id), newMeal.id];
       const earliestStart = recentMeals.reduce(
         (earliest, m) => (m.loggedAt < earliest ? m.loggedAt : earliest),
@@ -262,14 +274,44 @@ export async function loadSessionsWithMeals(): Promise<SessionWithMeals[]> {
   );
 }
 
-// Fetch the 3hr glucose curve for a session.
-// Accepts a mealId — resolves to the meal's session internally.
-// This keeps the call-sites in MealLogScreen / HomeScreen unchanged.
-export async function fetchAndStoreCurve(mealId: string): Promise<void> {
-  const [meals, sessions] = await Promise.all([loadMealsRaw(), loadSessionsRaw()]);
+// Fetch the 3hr glucose curve for a meal and store it on the meal object.
+// This is the primary curve fetch used by MealLogScreen and the history screen.
+export async function fetchAndStoreCurveForMeal(mealId: string): Promise<void> {
+  const meals = await loadMealsRaw();
   const meal = meals.find(m => m.id === mealId);
-  if (!meal?.sessionId) return;
-  await _fetchCurveForSession(meal.sessionId, sessions);
+  if (!meal) return;
+
+  const fromMs = new Date(meal.loggedAt).getTime();
+  const toMs = fromMs + THREE_HOURS_MS;
+  const nowMs = Date.now();
+
+  const readings = await fetchGlucoseRange(fromMs, Math.min(toMs, nowMs));
+  if (readings.length === 0) return;
+
+  const startGlucose = readings[0].mmol;
+  const peak = readings.reduce((best, r) => (r.mmol > best.mmol ? r : best), readings[0]);
+  const endReading = readings[readings.length - 1];
+
+  const glucoseResponse: GlucoseResponse = {
+    startGlucose,
+    peakGlucose: peak.mmol,
+    timeToPeakMins: Math.round((peak.date - fromMs) / 60000),
+    totalRise: Math.round((peak.mmol - startGlucose) * 10) / 10,
+    endGlucose: endReading.mmol,
+    fallFromPeak: Math.round((peak.mmol - endReading.mmol) * 10) / 10,
+    timeFromPeakToEndMins: Math.round((endReading.date - peak.date) / 60000),
+    readings,
+    isPartial: nowMs < toMs,
+    fetchedAt: new Date().toISOString(),
+  };
+
+  const updated = meals.map(m => (m.id === mealId ? { ...m, glucoseResponse } : m));
+  await saveMealsRaw(updated);
+}
+
+// Kept for call-site compatibility (MealLogScreen). Delegates to fetchAndStoreCurveForMeal.
+export async function fetchAndStoreCurve(mealId: string): Promise<void> {
+  await fetchAndStoreCurveForMeal(mealId);
 }
 
 // Fetch the curve directly by session ID (used by the history screen refresh button).
@@ -291,12 +333,16 @@ async function _fetchCurveForSession(sessionId: string, sessions: Session[]): Pr
 
   const startGlucose = readings[0].mmol;
   const peak = readings.reduce((best, r) => (r.mmol > best.mmol ? r : best), readings[0]);
+  const endReading = readings[readings.length - 1];
 
   const glucoseResponse: GlucoseResponse = {
     startGlucose,
     peakGlucose: peak.mmol,
     timeToPeakMins: Math.round((peak.date - fromMs) / 60000),
     totalRise: Math.round((peak.mmol - startGlucose) * 10) / 10,
+    endGlucose: endReading.mmol,
+    fallFromPeak: Math.round((peak.mmol - endReading.mmol) * 10) / 10,
+    timeFromPeakToEndMins: Math.round((endReading.date - peak.date) / 60000),
     readings,
     isPartial: nowMs < toMs,
     fetchedAt: new Date().toISOString(),

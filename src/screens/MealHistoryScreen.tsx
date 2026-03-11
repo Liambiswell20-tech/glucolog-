@@ -10,19 +10,18 @@ import {
   View,
 } from 'react-native';
 import {
-  fetchAndStoreCurveForSession,
+  fetchAndStoreCurveForMeal,
   fetchAndStoreBasalCurve,
   GlucoseResponse,
   BasalCurve,
   InsulinLog,
   Meal,
-  SessionConfidence,
-  SessionWithMeals,
-  loadSessionsWithMeals,
+  loadMeals,
   loadInsulinLogs,
 } from '../services/storage';
 
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
 // --- helpers ---
 
@@ -36,194 +35,14 @@ function formatDate(iso: string): string {
   });
 }
 
-function sessionIsComplete(startedAt: string): boolean {
-  return Date.now() - new Date(startedAt).getTime() >= THREE_HOURS_MS;
+function mealWindowComplete(loggedAt: string): boolean {
+  return Date.now() - new Date(loggedAt).getTime() >= THREE_HOURS_MS;
 }
 
-function minsUntilReady(startedAt: string): number {
-  const elapsed = Date.now() - new Date(startedAt).getTime();
+function minsUntilReady(loggedAt: string): number {
+  const elapsed = Date.now() - new Date(loggedAt).getTime();
   return Math.ceil((THREE_HOURS_MS - elapsed) / 60000);
 }
-
-// --- sub-components ---
-
-const CONFIDENCE_CONFIG: Record<
-  SessionConfidence,
-  { label: string; color: string; bg: string }
-> = {
-  high:   { label: '✓ Solo',    color: '#30D158', bg: '#0A3A1A' },
-  medium: { label: '⚠ Mixed',   color: '#FF9F0A', bg: '#3A2A00' },
-  low:    { label: '✕ Complex', color: '#FF3B30', bg: '#3A0A0A' },
-};
-
-function ConfidenceBadge({ confidence }: { confidence: SessionConfidence }) {
-  const cfg = CONFIDENCE_CONFIG[confidence];
-  return (
-    <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
-      <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
-    </View>
-  );
-}
-
-function MealRow({ meal }: { meal: Meal }) {
-  return (
-    <View style={styles.mealRow}>
-      {meal.photoUri ? (
-        <Image source={{ uri: meal.photoUri }} style={styles.thumbnail} />
-      ) : (
-        <View style={[styles.thumbnail, styles.noPhoto]}>
-          <Text style={styles.noPhotoIcon}>🍽</Text>
-        </View>
-      )}
-      <View style={styles.mealRowMeta}>
-        <Text style={styles.mealName}>{meal.name}</Text>
-        <View style={styles.mealRowDetails}>
-          <Text style={styles.mealTime}>
-            {new Date(meal.loggedAt).toLocaleTimeString('en-GB', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </Text>
-          {meal.insulinUnits > 0 && (
-            <Text style={styles.insulinTag}>{meal.insulinUnits}u</Text>
-          )}
-          {meal.startGlucose !== null && (
-            <Text style={styles.glucoseTag}>{meal.startGlucose.toFixed(1)} mmol/L</Text>
-          )}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  unit,
-  color = '#FFFFFF',
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  color?: string;
-}) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statUnit}>{unit}</Text>
-    </View>
-  );
-}
-
-function GlucoseResponseCard({ response }: { response: GlucoseResponse }) {
-  return (
-    <View style={styles.responseCard}>
-      <View style={styles.responseRow}>
-        <Stat label="Start" value={response.startGlucose.toFixed(1)} unit="mmol/L" />
-        <Stat
-          label="Peak"
-          value={response.peakGlucose.toFixed(1)}
-          unit="mmol/L"
-          color={response.peakGlucose > 10 ? '#FF9500' : '#30D158'}
-        />
-        <Stat
-          label="Rise"
-          value={`${response.totalRise > 0 ? '+' : ''}${response.totalRise.toFixed(1)}`}
-          unit="mmol/L"
-          color={response.totalRise > 0 ? '#FF9500' : '#30D158'}
-        />
-        <Stat label="To peak" value={`${response.timeToPeakMins}`} unit="mins" />
-      </View>
-      {response.isPartial && (
-        <Text style={styles.partialNote}>Curve still building — data up to now</Text>
-      )}
-    </View>
-  );
-}
-
-function SessionCard({
-  session,
-  onRefresh,
-}: {
-  session: SessionWithMeals;
-  onRefresh: () => void;
-}) {
-  const [fetching, setFetching] = useState(false);
-  const complete = sessionIsComplete(session.startedAt);
-  const minsLeft = minsUntilReady(session.startedAt);
-  const isLegacy = session.id.startsWith('legacy_');
-
-  async function handleFetchCurve() {
-    if (isLegacy) return; // legacy sessions can't be re-fetched via session API
-    setFetching(true);
-    try {
-      await fetchAndStoreCurveForSession(session.id);
-      onRefresh();
-    } finally {
-      setFetching(false);
-    }
-  }
-
-  return (
-    <View style={styles.card}>
-      {/* Session header */}
-      <View style={styles.cardHeader}>
-        <Text style={styles.sessionDate}>{formatDate(session.startedAt)}</Text>
-        <ConfidenceBadge confidence={session.confidence} />
-      </View>
-
-      {/* Confidence explanation for non-solo sessions */}
-      {session.confidence !== 'high' && (
-        <Text style={styles.confidenceNote}>
-          {session.confidence === 'medium'
-            ? 'Two entries within 3 hrs — curve reflects both'
-            : '3+ entries — glucose response is a combined reading'}
-        </Text>
-      )}
-
-      {/* Meal rows — show as list for multi, compact for solo */}
-      <View style={styles.mealList}>
-        {session.meals.map((meal, i) => (
-          <View key={meal.id}>
-            {i > 0 && <View style={styles.mealDivider} />}
-            <MealRow meal={meal} />
-          </View>
-        ))}
-      </View>
-
-      {/* Glucose curve */}
-      {session.glucoseResponse ? (
-        <>
-          <GlucoseResponseCard response={session.glucoseResponse} />
-          {session.glucoseResponse.isPartial && complete && !isLegacy && (
-            <Pressable style={styles.refreshBtn} onPress={handleFetchCurve} disabled={fetching}>
-              {fetching
-                ? <ActivityIndicator size="small" color="#0A84FF" />
-                : <Text style={styles.refreshBtnText}>Refresh curve</Text>
-              }
-            </Pressable>
-          )}
-        </>
-      ) : complete && !isLegacy ? (
-        <Pressable style={styles.fetchBtn} onPress={handleFetchCurve} disabled={fetching}>
-          {fetching
-            ? <ActivityIndicator size="small" color="#000" />
-            : <Text style={styles.fetchBtnText}>Load glucose curve</Text>
-          }
-        </Pressable>
-      ) : !complete ? (
-        <View style={styles.pendingRow}>
-          <Text style={styles.pendingText}>
-            Curve ready in ~{minsLeft} min{minsLeft !== 1 ? 's' : ''}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
 function basalWindowComplete(loggedAt: string): boolean {
   return Date.now() - new Date(loggedAt).getTime() >= TWELVE_HOURS_MS;
@@ -233,6 +52,161 @@ function minsUntilBasalReady(loggedAt: string): number {
   const elapsed = Date.now() - new Date(loggedAt).getTime();
   return Math.ceil((TWELVE_HOURS_MS - elapsed) / 60000);
 }
+
+// --- helpers ---
+
+function glucoseColor(mmol: number): string {
+  if (mmol < 3.9) return '#FF3B30';
+  if (mmol > 10.0) return '#FF9500';
+  return '#30D158';
+}
+
+// --- shared stat component ---
+
+function Stat({
+  label,
+  value,
+  unit,
+  color = '#FFFFFF',
+  delta,
+  deltaColor,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  color?: string;
+  delta?: string;
+  deltaColor?: string;
+}) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statUnit}>{unit}</Text>
+      {delta !== undefined && (
+        <Text style={[styles.statDelta, { color: deltaColor ?? '#8E8E93' }]}>{delta}</Text>
+      )}
+    </View>
+  );
+}
+
+// --- glucose response card (3 stats: Start · Peak · 3hr/Now) ---
+
+function GlucoseResponseCard({ response }: { response: GlucoseResponse }) {
+  const endLabel = response.isPartial ? 'Now' : '3hr';
+  const endGlucose = response.endGlucose ?? 0;
+  const startGlucose = response.startGlucose ?? 0;
+  const net = endGlucose - startGlucose;
+  const netStr = `${net >= 0 ? '▲ +' : '▼ '}${net.toFixed(1)}`;
+  const endRangeColor = glucoseColor(endGlucose);
+
+  return (
+    <View style={styles.responseCard}>
+      <View style={styles.responseRow}>
+        <Stat label="Start" value={startGlucose.toFixed(1)} unit="mmol/L" />
+        <Stat
+          label="Peak"
+          value={(response.peakGlucose ?? 0).toFixed(1)}
+          unit="mmol/L"
+          color={(response.peakGlucose ?? 0) > 10 ? '#FF9500' : '#30D158'}
+        />
+        <Stat
+          label={endLabel}
+          value={endGlucose.toFixed(1)}
+          unit="mmol/L"
+          color={endRangeColor}
+          delta={netStr}
+          deltaColor={endRangeColor}
+        />
+      </View>
+      {response.isPartial && (
+        <Text style={styles.partialNote}>Curve still building</Text>
+      )}
+    </View>
+  );
+}
+
+// --- meal card ---
+
+function MealCard({ meal, onRefresh }: { meal: Meal; onRefresh: () => void }) {
+  const [fetching, setFetching] = useState(false);
+  const complete = mealWindowComplete(meal.loggedAt);
+  const minsLeft = minsUntilReady(meal.loggedAt);
+
+  async function handleFetchCurve() {
+    setFetching(true);
+    try {
+      await fetchAndStoreCurveForMeal(meal.id);
+      onRefresh();
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      {/* Header: photo + name + insulin badge + date */}
+      <View style={styles.mealHeader}>
+        {meal.photoUri ? (
+          <Image source={{ uri: meal.photoUri }} style={styles.thumbnail} />
+        ) : (
+          <View style={[styles.thumbnail, styles.noPhoto]}>
+            <Text style={styles.noPhotoIcon}>🍽</Text>
+          </View>
+        )}
+        <View style={styles.mealMeta}>
+          <View style={styles.mealTitleRow}>
+            <Text style={styles.mealName} numberOfLines={1}>{meal.name}</Text>
+            {meal.insulinUnits > 0 && (
+              <View style={styles.insulinBadge}>
+                <Text style={styles.insulinBadgeText}>{meal.insulinUnits}u</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.mealDate}>{formatDate(meal.loggedAt)}</Text>
+          {meal.startGlucose !== null && (
+            <View style={styles.startGlucoseRow}>
+              <Text style={[styles.startGlucoseValue, { color: glucoseColor(meal.startGlucose) }]}>
+                {meal.startGlucose.toFixed(1)}
+              </Text>
+              <Text style={styles.startGlucoseUnit}> mmol/L before</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Glucose curve */}
+      {meal.glucoseResponse ? (
+        <>
+          <GlucoseResponseCard response={meal.glucoseResponse} />
+          {meal.glucoseResponse.isPartial && complete && (
+            <Pressable style={styles.refreshBtn} onPress={handleFetchCurve} disabled={fetching}>
+              {fetching
+                ? <ActivityIndicator size="small" color="#0A84FF" />
+                : <Text style={styles.refreshBtnText}>Refresh curve</Text>
+              }
+            </Pressable>
+          )}
+        </>
+      ) : complete ? (
+        <Pressable style={styles.fetchBtn} onPress={handleFetchCurve} disabled={fetching}>
+          {fetching
+            ? <ActivityIndicator size="small" color="#000" />
+            : <Text style={styles.fetchBtnText}>Load glucose curve</Text>
+          }
+        </Pressable>
+      ) : (
+        <View style={styles.pendingRow}>
+          <Text style={styles.pendingText}>
+            Curve ready in ~{minsLeft} min{minsLeft !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// --- basal curve card ---
 
 function BasalCurveCard({ curve }: { curve: BasalCurve }) {
   const dropColor = curve.totalDrop > 0 ? '#30D158' : '#FF9500';
@@ -285,7 +259,7 @@ function InsulinLogCard({ log, onRefresh }: { log: InsulinLog; onRefresh: () => 
   return (
     <View style={[styles.card, styles.insulinCard]}>
       <View style={styles.cardHeader}>
-        <Text style={styles.sessionDate}>{formatDate(log.loggedAt)}</Text>
+        <Text style={styles.cardDate}>{formatDate(log.loggedAt)}</Text>
         <View style={[styles.badge, {
           backgroundColor: isLongActing ? '#3A0A0A' : log.type === 'tablets' ? '#0A3A1A' : '#0A1A3A'
         }]}>
@@ -347,13 +321,11 @@ function InsulinLogCard({ log, onRefresh }: { log: InsulinLog; onRefresh: () => 
   );
 }
 
-// --- merged history item ---
+// --- screen ---
 
 type HistoryItem =
-  | { kind: 'session'; data: SessionWithMeals }
+  | { kind: 'meal'; data: Meal }
   | { kind: 'insulin'; data: InsulinLog };
-
-// --- screen ---
 
 export default function MealHistoryScreen() {
   const [items, setItems] = useState<HistoryItem[]>([]);
@@ -361,19 +333,14 @@ export default function MealHistoryScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [sessions, insulinLogs] = await Promise.all([
-      loadSessionsWithMeals(),
-      loadInsulinLogs(),
-    ]);
+    const [meals, insulinLogs] = await Promise.all([loadMeals(), loadInsulinLogs()]);
 
     const merged: HistoryItem[] = [
-      ...sessions.map(s => ({ kind: 'session' as const, data: s })),
+      ...meals.map(m => ({ kind: 'meal' as const, data: m })),
       ...insulinLogs.map(l => ({ kind: 'insulin' as const, data: l })),
-    ].sort((a, b) => {
-      const dateA = a.kind === 'session' ? a.data.startedAt : a.data.loggedAt;
-      const dateB = b.kind === 'session' ? b.data.startedAt : b.data.loggedAt;
-      return new Date(dateB).getTime() - new Date(dateA).getTime();
-    });
+    ].sort((a, b) =>
+      new Date(b.data.loggedAt).getTime() - new Date(a.data.loggedAt).getTime()
+    );
 
     setItems(merged);
     setLoading(false);
@@ -402,11 +369,11 @@ export default function MealHistoryScreen() {
   return (
     <FlatList
       data={items}
-      keyExtractor={item => item.kind === 'session' ? item.data.id : `ins_${item.data.id}`}
+      keyExtractor={item => item.kind === 'meal' ? item.data.id : `ins_${item.data.id}`}
       contentContainerStyle={styles.list}
       renderItem={({ item }) =>
-        item.kind === 'session'
-          ? <SessionCard session={item.data} onRefresh={load} />
+        item.kind === 'meal'
+          ? <MealCard meal={item.data} onRefresh={load} />
           : <InsulinLogCard log={item.data} onRefresh={load} />
       }
     />
@@ -426,70 +393,50 @@ const styles = StyleSheet.create({
   emptyHint: { fontSize: 14, color: '#8E8E93' },
   list: { padding: 16, gap: 16 },
 
-  // Session card
   card: {
     backgroundColor: '#1C1C1E',
     borderRadius: 16,
     padding: 16,
     gap: 12,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sessionDate: {
-    fontSize: 14,
-    color: '#8E8E93',
-    fontWeight: '500',
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  confidenceNote: {
-    fontSize: 12,
-    color: '#636366',
-    fontStyle: 'italic',
-    marginTop: -4,
-  },
 
-  // Meal rows
-  mealList: { gap: 0 },
-  mealDivider: {
-    height: 1,
-    backgroundColor: '#2C2C2E',
-    marginVertical: 10,
-  },
-  mealRow: {
+  // Meal card header
+  mealHeader: {
     flexDirection: 'row',
     gap: 12,
     alignItems: 'center',
   },
   thumbnail: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
+    width: 60,
+    height: 60,
+    borderRadius: 10,
   },
   noPhoto: {
     backgroundColor: '#2C2C2E',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noPhotoIcon: { fontSize: 22 },
-  mealRowMeta: { flex: 1, gap: 4 },
-  mealName: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
-  mealRowDetails: { flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
-  mealTime: { fontSize: 12, color: '#636366' },
-  insulinTag: { fontSize: 12, color: '#0A84FF' },
-  glucoseTag: { fontSize: 12, color: '#8E8E93' },
+  noPhotoIcon: { fontSize: 24 },
+  mealMeta: { flex: 1, gap: 3 },
+  mealTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mealName: { fontSize: 16, fontWeight: '600', color: '#FFFFFF', flex: 1 },
+  insulinBadge: {
+    backgroundColor: '#0A1A3A',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  insulinBadgeText: { fontSize: 12, fontWeight: '600', color: '#0A84FF' },
+  mealDate: { fontSize: 12, color: '#636366' },
+  startGlucoseRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 1 },
+  startGlucoseValue: { fontSize: 15, fontWeight: '700' },
+  startGlucoseUnit: { fontSize: 12, color: '#8E8E93' },
 
-  // Glucose response
+  // Glucose stats
   responseCard: {
     backgroundColor: '#2C2C2E',
     borderRadius: 12,
@@ -510,6 +457,7 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
   statUnit: { fontSize: 10, color: '#636366' },
+  statDelta: { fontSize: 11, fontWeight: '600', marginTop: 2 },
   partialNote: { fontSize: 12, color: '#FF9500', textAlign: 'center' },
 
   // States
@@ -527,6 +475,14 @@ const styles = StyleSheet.create({
 
   // Insulin log card
   insulinCard: { gap: 8 },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardDate: { fontSize: 14, color: '#8E8E93', fontWeight: '500' },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  badgeText: { fontSize: 12, fontWeight: '600' },
   insulinSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   insulinUnits: { fontSize: 16, color: '#8E8E93' },
   insulinUnitsValue: { fontSize: 28, fontWeight: '700' },
