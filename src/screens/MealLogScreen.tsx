@@ -23,7 +23,7 @@ import {
 } from '../services/carbEstimate';
 
 const DISCLAIMER =
-  'Carb estimate only — always calculate your dose using your personal carb:insulin ratio. Do not administer insulin based on this figure alone.';
+  'Carb estimate only — always calculate your dose using your personal carb:insulin ratio. Do not administer insulin based on this figure alone. Estimates are based on UK nutritional standards (available carbohydrate, excluding fibre). Always refer to product packaging if available.';
 
 export default function MealLogScreen() {
   const navigation = useNavigation();

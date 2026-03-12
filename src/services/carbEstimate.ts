@@ -74,7 +74,15 @@ export async function estimateCarbsFromPhoto(photoUri: string): Promise<string> 
             },
             {
               type: 'text',
-              text: 'Estimate the total carbohydrate content in grams of the food shown in this image. Give a single number or short range (e.g. "45g" or "40–50g") on the first line, then one sentence explaining your reasoning. If no food is visible, say so briefly.',
+              text: `Estimate the total carbohydrate content of the food shown in this image. Use UK nutritional standards throughout:
+- Base figures on McCance & Widdowson / CoFID (UK food composition database)
+- Carbohydrate means AVAILABLE carbohydrate only: starch + sugars. Do NOT include fibre.
+- All portion sizes and weights in grams only. Do not use cups, ounces, or US measures.
+- Use UK food references where applicable (e.g. Weetabix, Hovis, Heinz, Warburtons, Lurpak). Prefer UK branded products over US equivalents.
+- Do NOT use USDA figures.
+- Report one combined carbohydrate total only. Do NOT break down into sugars separately — sugars are already included within the carbohydrate figure and must not be listed or added on top.
+
+Give a single number or short range (e.g. "45g" or "40–50g") on the first line, then one sentence explaining your reasoning including the estimated portion weight. If no food is visible, say so briefly.`,
             },
           ],
         },
