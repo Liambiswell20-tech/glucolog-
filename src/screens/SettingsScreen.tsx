@@ -156,7 +156,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         <Text style={styles.disclaimer}>
-          Carb:insulin ratio is shown for personal reference only. GlucoLog does not give medical advice.
+          Carb:insulin ratio is shown for personal reference only. BolusBrain does not give medical advice.
           Always consult your diabetes care team before adjusting doses.
         </Text>
       </ScrollView>

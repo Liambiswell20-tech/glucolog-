@@ -4,7 +4,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 const FAQ = [
   {
     q: 'Why is my glucose reading stale?',
-    a: 'GlucoLog reads from your Nightscout instance, which polls LibreLinkUp every 5 minutes. If the reading is older than 10 minutes, the sensor may have lost connection or the LibreLinkUp bridge may need restarting.',
+    a: 'BolusBrain reads from your Nightscout instance, which polls LibreLinkUp every 5 minutes. If the reading is older than 10 minutes, the sensor may have lost connection or the LibreLinkUp bridge may need restarting.',
   },
   {
     q: 'What does the confidence indicator mean?',
@@ -12,7 +12,7 @@ const FAQ = [
   },
   {
     q: 'What is the carb:insulin ratio used for?',
-    a: 'It\'s stored for your reference and shown when logging meals in future updates. GlucoLog never gives dosing advice — always follow your care team\'s guidance.',
+    a: 'It\'s stored for your reference and shown when logging meals in future updates. BolusBrain never gives dosing advice — always follow your care team\'s guidance.',
   },
   {
     q: 'Why is the 12hr curve not showing for long-acting insulin?',
@@ -24,7 +24,7 @@ const FAQ = [
   },
   {
     q: 'Is my data private?',
-    a: 'Yes. All meal and insulin data is stored locally on your device. Glucose data is fetched directly from your personal Nightscout instance — no data passes through GlucoLog servers.',
+    a: 'Yes. All meal and insulin data is stored locally on your device. Glucose data is fetched directly from your personal Nightscout instance — no data passes through BolusBrain servers.',
   },
 ];
 
@@ -43,16 +43,16 @@ export default function HelpScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionHeader}>About GlucoLog</Text>
+        <Text style={styles.sectionHeader}>About BolusBrain</Text>
         <View style={styles.card}>
           <Text style={styles.aboutText}>
-            GlucoLog is a personal T1D meal and glucose tracking app built by a Type 1 diabetic, for Type 1 diabetics.
+            BolusBrain is a personal T1D meal and glucose tracking app built by a Type 1 diabetic, for Type 1 diabetics.
           </Text>
           <Text style={styles.aboutText}>
             It connects to your Nightscout instance to display live CGM data and builds a personal memory of how your body responds to different meals over time.
           </Text>
           <Text style={[styles.aboutText, { color: '#636366' }]}>
-            GlucoLog does not give medical advice. Always consult your diabetes care team.
+            BolusBrain does not give medical advice. Always consult your diabetes care team.
           </Text>
         </View>
       </View>
@@ -60,8 +60,8 @@ export default function HelpScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Contact</Text>
         <View style={styles.card}>
-          <Pressable onPress={() => Linking.openURL('mailto:support@glucolog.app')}>
-            <Text style={styles.contactLink}>support@glucolog.app</Text>
+          <Pressable onPress={() => Linking.openURL('mailto:support@bolusbrain.app')}>
+            <Text style={styles.contactLink}>support@bolusbrain.app</Text>
           </Pressable>
         </View>
       </View>

@@ -124,7 +124,7 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.headerTitle}>GlucoLog</Text>
+            <Text style={styles.headerTitle}>BolusBrain</Text>
             <Text style={styles.headerSub}>Your glucose memory</Text>
           </View>
           <Pressable style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')} hitSlop={12}>

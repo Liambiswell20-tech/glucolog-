@@ -1,4 +1,4 @@
-# GlucoLog — Claude Code Project Rules
+# BolusBrain — Claude Code Project Rules
 
 ## What This App Is
 A personal meal and insulin tracking app for Type 1 diabetics.
