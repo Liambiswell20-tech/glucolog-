@@ -16,8 +16,8 @@ import {
   View,
 } from 'react-native';
 import GlucoseDisplay from '../components/GlucoseDisplay';
-import { fetchLatestGlucose, fetchAverage12h, GlucoseReading } from '../services/nightscout';
-import { fetchAndStoreCurve, saveMeal } from '../services/storage';
+import { fetchLatestGlucose, fetchGlucosesSince, GlucoseReading } from '../services/nightscout';
+import { fetchAndStoreCurve, saveMeal, loadGlucoseStore, updateGlucoseStore, loadCachedHba1c, computeAndCacheHba1c, Hba1cEstimate } from '../services/storage';
 import type { RootStackParamList } from '../../App';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -29,6 +29,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avg12h, setAvg12h] = useState<number | null>(null);
+  const [hba1c, setHba1c] = useState<Hba1cEstimate | null>(null);
 
   // Quick log modal
   const [quickLogVisible, setQuickLogVisible] = useState(false);
@@ -41,12 +42,27 @@ export default function HomeScreen() {
     if (isRefresh) setRefreshing(true);
     setError(null);
     try {
-      const [data, avg] = await Promise.all([
+      // Find lastFetchedAt from local store (or go back 30 days on first load)
+      const store = await loadGlucoseStore();
+      const fromMs = store?.lastFetchedAt ?? (Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      // Fetch live reading + only new entries since last fetch — parallel
+      const [data, newEntries] = await Promise.all([
         fetchLatestGlucose(),
-        fetchAverage12h(),
+        fetchGlucosesSince(fromMs),
       ]);
       setReading(data);
-      setAvg12h(avg);
+
+      // Update rolling store, derive both averages locally
+      const { avg12h, avg30d, daysOfData } = await updateGlucoseStore(newEntries);
+      setAvg12h(avg12h);
+
+      // Recompute HbA1c once per day from avg30d
+      if (avg30d !== null) {
+        const cached = await loadCachedHba1c();
+        const estimate = cached ?? await computeAndCacheHba1c(avg30d, daysOfData);
+        setHba1c(estimate);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load glucose');
     } finally {
@@ -131,22 +147,35 @@ export default function HomeScreen() {
           ) : null}
         </View>
 
-        {/* 12hr average box */}
+        {/* 12hr average + est. HbA1c */}
         <View style={styles.avgBox}>
-          <View style={styles.avgLeft}>
+          <View style={styles.avgSection}>
             <Text style={styles.avgLabel}>12hr average</Text>
             {avg12h !== null ? (
-              <Text style={[
-                styles.avgValue,
-                { color: avg12h < 3.9 ? '#FF3B30' : avg12h > 10 ? '#FF9500' : '#30D158' }
-              ]}>
+              <Text style={[styles.avgValue, { color: avg12h < 3.9 ? '#FF3B30' : avg12h > 10 ? '#FF9500' : '#30D158' }]}>
                 {avg12h.toFixed(1)}
               </Text>
             ) : (
               <Text style={styles.avgValue}>—</Text>
             )}
+            <Text style={styles.avgUnit}>mmol/L</Text>
           </View>
-          <Text style={styles.avgUnit}>mmol/L</Text>
+
+          <View style={styles.avgDivider} />
+
+          <View style={styles.avgSection}>
+            <Text style={styles.avgLabel}>
+              est. HbA1c{hba1c ? ` (${hba1c.daysOfData}d)` : ''}
+            </Text>
+            {hba1c ? (
+              <>
+                <Text style={styles.avgValue}>{hba1c.percent}%</Text>
+                <Text style={styles.avgUnit}>{hba1c.mmolMol} mmol/mol</Text>
+              </>
+            ) : (
+              <Text style={styles.avgValue}>—</Text>
+            )}
+          </View>
         </View>
 
         {/* Primary actions */}
@@ -311,7 +340,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 16, color: '#FF3B30', textAlign: 'center' },
   errorHint: { fontSize: 13, color: '#8E8E93' },
 
-  // 12hr average
+  // 12hr average + HbA1c
   avgBox: {
     width: '100%',
     backgroundColor: '#1C1C1E',
@@ -320,13 +349,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 0,
   },
-  avgLeft: { gap: 2 },
-  avgLabel: { fontSize: 12, color: '#636366', textTransform: 'uppercase', letterSpacing: 0.8 },
-  avgValue: { fontSize: 28, fontWeight: '700', color: '#8E8E93' },
-  avgUnit: { fontSize: 14, color: '#636366' },
+  avgSection: { flex: 1, gap: 2 },
+  avgDivider: { width: 1, backgroundColor: '#2C2C2E', alignSelf: 'stretch', marginHorizontal: 16 },
+  avgLabel: { fontSize: 11, color: '#636366', textTransform: 'uppercase', letterSpacing: 0.8 },
+  avgValue: { fontSize: 26, fontWeight: '700', color: '#8E8E93' },
+  avgUnit: { fontSize: 13, color: '#636366' },
 
   // Actions
   actionRow: { width: '100%', flexDirection: 'row', gap: 10, marginBottom: 10 },

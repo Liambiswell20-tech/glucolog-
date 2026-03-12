@@ -4,8 +4,11 @@ import { CurvePoint, fetchGlucoseRange } from './nightscout';
 const MEALS_KEY = 'glucolog_meals';
 const SESSIONS_KEY = 'glucolog_sessions';
 const INSULIN_LOGS_KEY = 'glucolog_insulin_logs';
+const HBA1C_CACHE_KEY = 'glucolog_hba1c_cache';
+const GLUCOSE_STORE_KEY = 'glucolog_glucose_store';
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Long-acting and correction dose logs — stored separately, never used in meal patterns.
 export type InsulinLogType = 'long-acting' | 'correction' | 'tablets';
@@ -85,6 +88,108 @@ export async function fetchAndStoreBasalCurve(logId: string): Promise<void> {
 
   const updated = logs.map(l => (l.id === logId ? { ...l, basalCurve } : l));
   await AsyncStorage.setItem(INSULIN_LOGS_KEY, JSON.stringify(updated));
+}
+
+// --- rolling 30-day glucose store ---
+// Stores { date, sgv } points locally. On each refresh, only new readings are fetched.
+// Avg12h and avg30d are derived from this store — no repeated API calls.
+
+export interface GlucosePoint {
+  date: number; // epoch ms
+  sgv: number;  // mg/dL
+}
+
+export interface GlucoseStore {
+  readings: GlucosePoint[]; // sorted oldest-first, max 30d window
+  sum: number;              // sum of all sgv values (for fast avg without re-reducing)
+  lastFetchedAt: number;    // epoch ms — used as fromMs on next fetch
+}
+
+export async function loadGlucoseStore(): Promise<GlucoseStore | null> {
+  const raw = await AsyncStorage.getItem(GLUCOSE_STORE_KEY);
+  if (!raw) return null;
+  return JSON.parse(raw) as GlucoseStore;
+}
+
+// Merges new entries into the store, drops readings older than 30 days,
+// and returns computed avg12h, avg30d, and daysOfData.
+export async function updateGlucoseStore(
+  newEntries: GlucosePoint[]
+): Promise<{ avg12h: number | null; avg30d: number | null; daysOfData: number }> {
+  const existing = await loadGlucoseStore();
+  const now = Date.now();
+  const cutoff30d = now - THIRTY_DAYS_MS;
+  const cutoff12h = now - TWELVE_HOURS_MS;
+
+  let readings: GlucosePoint[] = existing?.readings ?? [];
+  let sum = existing?.sum ?? 0;
+
+  // Append new entries, deduplicating by date
+  const existingDates = new Set(readings.map(r => r.date));
+  for (const e of newEntries) {
+    if (!existingDates.has(e.date)) {
+      readings.push(e);
+      sum += e.sgv;
+    }
+  }
+
+  // Drop readings older than 30 days
+  const toKeep: GlucosePoint[] = [];
+  for (const r of readings) {
+    if (r.date >= cutoff30d) {
+      toKeep.push(r);
+    } else {
+      sum -= r.sgv;
+    }
+  }
+  readings = toKeep.sort((a, b) => a.date - b.date);
+
+  const store: GlucoseStore = { readings, sum, lastFetchedAt: now };
+  await AsyncStorage.setItem(GLUCOSE_STORE_KEY, JSON.stringify(store));
+
+  const count = readings.length;
+  const avg30d = count > 0 ? Math.round((sum / count / 18) * 10) / 10 : null;
+
+  const recent = readings.filter(r => r.date >= cutoff12h);
+  const avg12h = recent.length > 0
+    ? Math.round((recent.reduce((s, r) => s + r.sgv, 0) / recent.length / 18) * 10) / 10
+    : null;
+
+  const oldest = readings.length > 0 ? readings[0].date : now;
+  const daysOfData = Math.max(1, Math.min(30, Math.round((now - oldest) / (24 * 60 * 60 * 1000))));
+
+  return { avg12h, avg30d, daysOfData };
+}
+
+export interface Hba1cEstimate {
+  percent: number;     // e.g. 6.8
+  mmolMol: number;     // e.g. 51
+  daysOfData: number;  // how many days of readings the estimate is based on
+  calculatedDate: string; // YYYY-MM-DD — used to invalidate cache daily
+}
+
+export async function loadCachedHba1c(): Promise<Hba1cEstimate | null> {
+  const raw = await AsyncStorage.getItem(HBA1C_CACHE_KEY);
+  if (!raw) return null;
+  const cached = JSON.parse(raw) as Hba1cEstimate;
+  const today = new Date().toISOString().slice(0, 10);
+  return cached.calculatedDate === today ? cached : null;
+}
+
+export async function computeAndCacheHba1c(
+  avgMmol: number,
+  daysOfData: number
+): Promise<Hba1cEstimate> {
+  const percent = Math.round(((avgMmol + 2.59) / 1.59) * 10) / 10;
+  const mmolMol = Math.round(10.929 * (avgMmol - 2.15));
+  const estimate: Hba1cEstimate = {
+    percent,
+    mmolMol,
+    daysOfData,
+    calculatedDate: new Date().toISOString().slice(0, 10),
+  };
+  await AsyncStorage.setItem(HBA1C_CACHE_KEY, JSON.stringify(estimate));
+  return estimate;
 }
 
 export interface GlucoseResponse {
