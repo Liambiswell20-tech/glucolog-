@@ -1,5 +1,5 @@
-const NIGHTSCOUT_URL = 'https://p01--nightscout--7x4mdclxhl6z.code.run/api/v1/entries.json';
-const TOKEN = '[REDACTED]';
+const NIGHTSCOUT_URL = process.env.EXPO_PUBLIC_NIGHTSCOUT_URL ?? '';
+const TOKEN = process.env.EXPO_PUBLIC_NIGHTSCOUT_TOKEN ?? '';
 
 export type TrendDirection =
   | 'DoubleUp'

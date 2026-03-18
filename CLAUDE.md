@@ -4,7 +4,7 @@
 A personal meal and insulin tracking app for Type 1 diabetics.
 Developer and first user: Liam Biswell (T1D, FreeStyle Libre 2 Plus, UK).
 
-Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Glucolog Project\CLAUDE.md`
+Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.md`
 
 ---
 
@@ -20,8 +20,8 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Glucolog Project\CLAUDE.md`
 - Orange: `> 10.0 mmol/L` (high)
 
 ## Nightscout API
-- URL: `https://p01--nightscout--7x4mdclxhl6z.code.run/api/v1/entries.json`
-- Token: `[REDACTED]`
+- URL: set via `EXPO_PUBLIC_NIGHTSCOUT_URL` in `.env`
+- Token: set via `EXPO_PUBLIC_NIGHTSCOUT_TOKEN` in `.env`
 - `sgv` is mg/dL — divide by 18 for mmol/L
 - Readings every 5 minutes
 
