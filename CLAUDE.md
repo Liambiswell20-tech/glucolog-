@@ -8,6 +8,20 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.
 
 ---
 
+## Security Rules — NON-NEGOTIABLE
+- **NEVER hardcode API keys, tokens, URLs with tokens, or credentials in source files**
+- All secrets must live in `.env` only — use `EXPO_PUBLIC_*` prefix for Expo access
+- `.env` is gitignored — never commit it, never suggest committing it
+- When adding a new external service, always use an env var from day one
+- If a secret is ever accidentally committed, treat it as compromised immediately — rotate it
+
+**Env vars in use:**
+- `EXPO_PUBLIC_NIGHTSCOUT_URL` — Nightscout API endpoint
+- `EXPO_PUBLIC_NIGHTSCOUT_TOKEN` — Nightscout access token
+- `EXPO_PUBLIC_ANTHROPIC_API_KEY` — Claude API key for carb estimation
+
+---
+
 ## Absolute Rules
 - Always display glucose in **mmol/L** — never mg/dL
 - **Never give insulin dosing advice** — show historical patterns only
