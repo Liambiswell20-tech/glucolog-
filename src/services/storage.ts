@@ -221,6 +221,7 @@ export interface Meal {
   photoUri: string | null;
   insulinUnits: number;
   startGlucose: number | null;  // mmol/L at time of logging
+  carbsEstimated: number | null; // grams, from AI estimate — null if no estimate generated
   loggedAt: string;             // ISO
   sessionId: string | null;
   glucoseResponse: GlucoseResponse | null; // kept for backward-compat with pre-session data
@@ -262,6 +263,34 @@ function computeConfidence(mealCount: number): SessionConfidence {
 
 export async function loadMeals(): Promise<Meal[]> {
   return loadMealsRaw();
+}
+
+export async function updateMeal(
+  id: string,
+  changes: Partial<Pick<Meal, 'name' | 'photoUri' | 'insulinUnits' | 'loggedAt' | 'carbsEstimated'>>
+): Promise<void> {
+  const meals = await loadMealsRaw();
+  const updated = meals.map(m => (m.id === id ? { ...m, ...changes } : m));
+  await saveMealsRaw(updated);
+}
+
+export async function updateInsulinLog(
+  id: string,
+  changes: Partial<Pick<InsulinLog, 'units' | 'loggedAt'>>
+): Promise<void> {
+  const logs = await loadInsulinLogs();
+  const updated = logs.map(l => (l.id === id ? { ...l, ...changes } : l));
+  await AsyncStorage.setItem(INSULIN_LOGS_KEY, JSON.stringify(updated));
+}
+
+export async function deleteMeal(id: string): Promise<void> {
+  const meals = await loadMealsRaw();
+  await saveMealsRaw(meals.filter(m => m.id !== id));
+}
+
+export async function deleteInsulinLog(id: string): Promise<void> {
+  const logs = await loadInsulinLogs();
+  await AsyncStorage.setItem(INSULIN_LOGS_KEY, JSON.stringify(logs.filter(l => l.id !== id)));
 }
 
 export async function saveMeal(

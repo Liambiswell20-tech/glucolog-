@@ -103,6 +103,7 @@ export default function HomeScreen() {
         photoUri: null,
         insulinUnits: isNaN(units) ? 0 : units,
         startGlucose,
+        carbsEstimated: null,
       });
       fetchAndStoreCurve(meal.id).catch(() => {});
       setQuickLogVisible(false);

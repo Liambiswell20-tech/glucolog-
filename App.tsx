@@ -6,6 +6,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import MealLogScreen from './src/screens/MealLogScreen';
 import MealHistoryScreen from './src/screens/MealHistoryScreen';
 import InsulinLogScreen from './src/screens/InsulinLogScreen';
+import EditMealScreen from './src/screens/EditMealScreen';
+import EditInsulinScreen from './src/screens/EditInsulinScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AccountScreen from './src/screens/AccountScreen';
 import HelpScreen from './src/screens/HelpScreen';
@@ -16,6 +18,8 @@ export type RootStackParamList = {
   MealLog: undefined;
   MealHistory: undefined;
   InsulinLog: { type: InsulinLogType };
+  EditMeal: { mealId: string };
+  EditInsulin: { logId: string };
   Settings: undefined;
   Account: undefined;
   Help: undefined;
@@ -50,6 +54,8 @@ export default function App() {
                 : 'Correction dose',
             })}
           />
+          <Stack.Screen name="EditMeal" component={EditMealScreen} options={{ title: 'Edit meal' }} />
+          <Stack.Screen name="EditInsulin" component={EditInsulinScreen} options={{ title: 'Edit entry' }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
           <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
           <Stack.Screen name="Help" component={HelpScreen} options={{ title: 'Help & FAQ' }} />
