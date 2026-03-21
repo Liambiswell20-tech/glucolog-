@@ -1,10 +1,10 @@
 // src/components/types.ts
 // Phase 2 component prop contracts.
-// MatchingSlotProps is the Phase 3 wire-in point — do not change this interface in Phase 3,
-// only provide real data instead of null.
+// Phase 3 wire-in: MatchingSlotProps.matchData widened to null | MatchSummary.
 
 import type { GlucoseResponse, Meal, SessionWithMeals } from '../services/storage';
 import type { OutcomeBadge } from '../utils/outcomeClassifier';
+import type { MatchSummary } from '../services/matching';
 
 // ---- GlucoseChart ----
 // Renders a static 3-hour glucose curve line chart with reference lines at 3.9 and 10.0 mmol/L.
@@ -23,21 +23,22 @@ export interface OutcomeBadgeProps {
 }
 
 // ---- MatchingSlotProps ----
-// Phase 3 wire-in point. In Phase 2, matchData is always null — the component renders
-// a greyed-out "Loading..." placeholder (per D-09). Phase 3 passes real match data here.
+// Phase 3 wire-in: matchData carries real match data from findSimilarSessions.
+// null = no matches computed yet (legacy meals without sessionId, or session not found).
 export interface MatchingSlotProps {
-  matchData: null;  // Phase 3 will widen this type: null | MatchResult[]
+  matchData: null | MatchSummary;
 }
 
 // ---- ExpandableCard ----
 // A meal card that can be tapped to expand/collapse.
-// Expanded state shows: stats row (start/peak/end mmol/L) + GlucoseChart + MatchingSlot placeholder.
+// Expanded state shows: stats row (start/peak/end mmol/L) + GlucoseChart + MatchingSlot.
 // Per D-04: uses LayoutAnimation.easeInEaseOut. Per D-05: shows stats row + chart.
-// Per D-09: matching slot shows greyed-out "Loading..." in Phase 2.
+// Phase 3: matching slot computes real match data on first expand via allSessions.
 export interface ExpandableCardProps {
   meal: Meal;
-  onRefresh: () => void;     // called after curve fetch to trigger list reload
-  matchingSlot: MatchingSlotProps;  // always { matchData: null } in Phase 2
+  onRefresh: () => void;         // called after curve fetch to trigger list reload
+  matchingSlot: MatchingSlotProps;
+  allSessions: SessionWithMeals[]; // passed from MealHistoryScreen for matching computation
 }
 
 // ---- DayGroupHeader ----
