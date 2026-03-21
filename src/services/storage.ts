@@ -38,15 +38,17 @@ export interface InsulinLog {
 export async function saveInsulinLog(
   type: InsulinLogType,
   units: number,
-  startGlucose: number | null
+  startGlucose: number | null,
+  loggedAt?: Date  // optional — defaults to new Date() if not provided
 ): Promise<InsulinLog> {
   const existing = await loadInsulinLogs();
+  const now = loggedAt ?? new Date();
   const log: InsulinLog = {
     id: Date.now().toString(),
     type,
     units,
     startGlucose,
-    loggedAt: new Date().toISOString(),
+    loggedAt: now.toISOString(),
     basalCurve: null,
   };
   await AsyncStorage.setItem(INSULIN_LOGS_KEY, JSON.stringify([log, ...existing]));

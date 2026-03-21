@@ -11,10 +11,22 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { saveInsulinLog, fetchAndStoreBasalCurve, InsulinLogType } from '../services/storage';
 import { loadSettings } from '../services/settings';
 import { fetchLatestGlucose } from '../services/nightscout';
 import type { RootStackParamList } from '../../App';
+
+function applyLateEntryTime(selectedTime: Date): Date {
+  const now = new Date();
+  const candidate = new Date(now);
+  candidate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+  // If the resulting time is in the future, use yesterday at the same time
+  if (candidate > now) {
+    candidate.setDate(candidate.getDate() - 1);
+  }
+  return candidate;
+}
 
 const CONFIG: Record<InsulinLogType, { title: string; subtitle: string; color: string; emoji: string; unitsLabel: string }> = {
   'long-acting': {
@@ -49,6 +61,9 @@ export default function InsulinLogScreen() {
   const [units, setUnits] = useState('');
   const [saving, setSaving] = useState(false);
   const [tabletInfo, setTabletInfo] = useState('');
+  const [lateEntry, setLateEntry] = useState(false);
+  const [loggedAt, setLoggedAt] = useState(new Date());
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   React.useEffect(() => {
@@ -76,7 +91,7 @@ export default function InsulinLogScreen() {
         startGlucose = r.mmol;
       } catch {}
 
-      const log = await saveInsulinLog(type, parsed, startGlucose);
+      const log = await saveInsulinLog(type, parsed, startGlucose, loggedAt);
 
       if (type === 'long-acting') {
         fetchAndStoreBasalCurve(log.id).catch(() => {});
@@ -126,6 +141,40 @@ export default function InsulinLogScreen() {
             : <Text style={styles.saveBtnText}>Save</Text>
           }
         </Pressable>
+
+        {/* Late Entry toggle */}
+        <Pressable
+          style={[styles.lateEntryToggle, lateEntry && styles.lateEntryToggleActive]}
+          onPress={() => {
+            setLateEntry(v => !v);
+            if (lateEntry) setLoggedAt(new Date()); // reset to now when deactivated
+          }}
+        >
+          <Text style={[styles.lateEntryToggleText, lateEntry && styles.lateEntryToggleTextActive]}>
+            {lateEntry ? 'Late Entry: tap to change time' : 'Late Entry'}
+          </Text>
+        </Pressable>
+
+        {lateEntry && (
+          <Pressable style={styles.timeDisplay} onPress={() => setShowTimePicker(true)}>
+            <Text style={styles.timeDisplayText}>
+              {loggedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })}
+              {loggedAt.toDateString() !== new Date().toDateString() && ' (yesterday)'}
+            </Text>
+          </Pressable>
+        )}
+        {showTimePicker && (
+          <DateTimePicker
+            value={loggedAt}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_event: DateTimePickerEvent, date?: Date) => {
+              setShowTimePicker(false);
+              if (date) setLoggedAt(applyLateEntryTime(date));
+            }}
+          />
+        )}
 
         {type === 'long-acting' && (
           <>
@@ -212,6 +261,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 18,
   },
+  lateEntryToggle: {
+    borderWidth: 1, borderColor: '#3A3A3C', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  lateEntryToggleActive: { borderColor: '#0A84FF', backgroundColor: '#0A1A3A' },
+  lateEntryToggleText: { fontSize: 14, color: '#8E8E93' },
+  lateEntryToggleTextActive: { color: '#0A84FF', fontWeight: '600' },
+  timeDisplay: { alignSelf: 'flex-start', paddingVertical: 4 },
+  timeDisplayText: { fontSize: 15, color: '#0A84FF', fontWeight: '600' },
   tabletReminder: {
     backgroundColor: '#1C1C1E',
     borderRadius: 12,
