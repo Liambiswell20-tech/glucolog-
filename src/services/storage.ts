@@ -122,14 +122,12 @@ export async function updateGlucoseStore(
   const cutoff12h = now - TWELVE_HOURS_MS;
 
   let readings: GlucosePoint[] = existing?.readings ?? [];
-  let sum = existing?.sum ?? 0;
 
   // Append new entries, deduplicating by date
   const existingDates = new Set(readings.map(r => r.date));
   for (const e of newEntries) {
     if (!existingDates.has(e.date)) {
       readings.push(e);
-      sum += e.sgv;
     }
   }
 
@@ -138,11 +136,12 @@ export async function updateGlucoseStore(
   for (const r of readings) {
     if (r.date >= cutoff30d) {
       toKeep.push(r);
-    } else {
-      sum -= r.sgv;
     }
   }
   readings = toKeep.sort((a, b) => a.date - b.date);
+
+  // Recompute sum from array — prevents incremental drift from floating-point accumulation
+  const sum = readings.reduce((acc, r) => acc + r.sgv, 0);
 
   const store: GlucoseStore = { readings, sum, lastFetchedAt: now };
   await AsyncStorage.setItem(GLUCOSE_STORE_KEY, JSON.stringify(store));
@@ -411,6 +410,30 @@ export async function loadSessionsWithMeals(): Promise<SessionWithMeals[]> {
   );
 }
 
+// Pure function — builds GlucoseResponse from a curve fetch result.
+// Called by both fetchAndStoreCurveForMeal and _fetchCurveForSession.
+function buildGlucoseResponse(
+  fromMs: number,
+  readings: CurvePoint[],
+  nowMs: number
+): GlucoseResponse {
+  const startGlucose = readings[0].mmol;
+  const peak = readings.reduce((best, r) => (r.mmol > best.mmol ? r : best), readings[0]);
+  const endReading = readings[readings.length - 1];
+  return {
+    startGlucose,
+    peakGlucose: peak.mmol,
+    timeToPeakMins: Math.round((peak.date - fromMs) / 60000),
+    totalRise: Math.round((peak.mmol - startGlucose) * 10) / 10,
+    endGlucose: endReading.mmol,
+    fallFromPeak: Math.round((peak.mmol - endReading.mmol) * 10) / 10,
+    timeFromPeakToEndMins: Math.round((endReading.date - peak.date) / 60000),
+    readings,
+    isPartial: nowMs < (fromMs + THREE_HOURS_MS),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
 // Fetch the 3hr glucose curve for a meal and store it on the meal object.
 // This is the primary curve fetch used by MealLogScreen and the history screen.
 export async function fetchAndStoreCurveForMeal(mealId: string): Promise<void> {
@@ -425,22 +448,7 @@ export async function fetchAndStoreCurveForMeal(mealId: string): Promise<void> {
   const readings = await fetchGlucoseRange(fromMs, Math.min(toMs, nowMs));
   if (readings.length === 0) return;
 
-  const startGlucose = readings[0].mmol;
-  const peak = readings.reduce((best, r) => (r.mmol > best.mmol ? r : best), readings[0]);
-  const endReading = readings[readings.length - 1];
-
-  const glucoseResponse: GlucoseResponse = {
-    startGlucose,
-    peakGlucose: peak.mmol,
-    timeToPeakMins: Math.round((peak.date - fromMs) / 60000),
-    totalRise: Math.round((peak.mmol - startGlucose) * 10) / 10,
-    endGlucose: endReading.mmol,
-    fallFromPeak: Math.round((peak.mmol - endReading.mmol) * 10) / 10,
-    timeFromPeakToEndMins: Math.round((endReading.date - peak.date) / 60000),
-    readings,
-    isPartial: nowMs < toMs,
-    fetchedAt: new Date().toISOString(),
-  };
+  const glucoseResponse = buildGlucoseResponse(fromMs, readings, nowMs);
 
   const updated = meals.map(m => (m.id === mealId ? { ...m, glucoseResponse } : m));
   await saveMealsRaw(updated);
@@ -457,6 +465,9 @@ export async function fetchAndStoreCurveForSession(sessionId: string): Promise<v
   await _fetchCurveForSession(sessionId, sessions);
 }
 
+// DEPRECATED write path: this function saves glucoseResponse onto the Session object.
+// The canonical curve location is Meal.glucoseResponse — use fetchAndStoreCurveForMeal() instead.
+// This function is kept for call-site compatibility but should not be used for new features.
 async function _fetchCurveForSession(sessionId: string, sessions: Session[]): Promise<void> {
   const session = sessions.find(s => s.id === sessionId);
   if (!session) return;
@@ -468,22 +479,7 @@ async function _fetchCurveForSession(sessionId: string, sessions: Session[]): Pr
   const readings = await fetchGlucoseRange(fromMs, Math.min(toMs, nowMs));
   if (readings.length === 0) return;
 
-  const startGlucose = readings[0].mmol;
-  const peak = readings.reduce((best, r) => (r.mmol > best.mmol ? r : best), readings[0]);
-  const endReading = readings[readings.length - 1];
-
-  const glucoseResponse: GlucoseResponse = {
-    startGlucose,
-    peakGlucose: peak.mmol,
-    timeToPeakMins: Math.round((peak.date - fromMs) / 60000),
-    totalRise: Math.round((peak.mmol - startGlucose) * 10) / 10,
-    endGlucose: endReading.mmol,
-    fallFromPeak: Math.round((peak.mmol - endReading.mmol) * 10) / 10,
-    timeFromPeakToEndMins: Math.round((endReading.date - peak.date) / 60000),
-    readings,
-    isPartial: nowMs < toMs,
-    fetchedAt: new Date().toISOString(),
-  };
+  const glucoseResponse = buildGlucoseResponse(fromMs, readings, nowMs);
 
   const updated = sessions.map(s => (s.id === sessionId ? { ...s, glucoseResponse } : s));
   await saveSessionsRaw(updated);
