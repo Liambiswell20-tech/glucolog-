@@ -457,6 +457,7 @@ export default function MealHistoryScreen() {
               meal={row.meal}
               onRefresh={silentRefresh}
               matchingSlot={{ matchData: null }}
+              allSessions={sessions}
             />
           );
         }
