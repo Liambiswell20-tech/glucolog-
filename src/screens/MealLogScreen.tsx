@@ -23,6 +23,17 @@ import {
   RateLimitError,
 } from '../services/carbEstimate';
 
+function applyLateEntryTime(selectedTime: Date): Date {
+  const now = new Date();
+  const candidate = new Date(now);
+  candidate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+  // If the resulting time is in the future, use yesterday at the same time
+  if (candidate > now) {
+    candidate.setDate(candidate.getDate() - 1);
+  }
+  return candidate;
+}
+
 function parseCarbsGrams(estimate: string | null): number | null {
   if (!estimate) return null;
   // Range like "40–50g" or "40-50g" → midpoint
@@ -45,6 +56,7 @@ export default function MealLogScreen() {
   const [saving, setSaving] = useState(false);
   const [loggedAt, setLoggedAt] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [lateEntry, setLateEntry] = useState(false);
 
   // Carb estimate state
   const [estimating, setEstimating] = useState(false);
@@ -258,40 +270,38 @@ export default function MealLogScreen() {
           returnKeyType="done"
         />
 
-        {/* Logged at */}
-        <Text style={styles.label}>Logged at</Text>
-        <Pressable style={styles.timeRow} onPress={() => setShowTimePicker(true)}>
-          <Text style={styles.timeText}>
-            {loggedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
+        {/* Late Entry toggle */}
+        <Pressable
+          style={[styles.lateEntryToggle, lateEntry && styles.lateEntryToggleActive]}
+          onPress={() => {
+            setLateEntry(v => !v);
+            if (lateEntry) setLoggedAt(new Date()); // reset to now when deactivated
+          }}
+        >
+          <Text style={[styles.lateEntryToggleText, lateEntry && styles.lateEntryToggleTextActive]}>
+            {lateEntry ? 'Late Entry: tap to change time' : 'Late Entry'}
           </Text>
-          <Text style={styles.timeChange}>Change</Text>
         </Pressable>
 
+        {lateEntry && (
+          <Pressable style={styles.timeDisplay} onPress={() => setShowTimePicker(true)}>
+            <Text style={styles.timeDisplayText}>
+              {loggedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true })}
+              {loggedAt.toDateString() !== new Date().toDateString() && ' (yesterday)'}
+            </Text>
+          </Pressable>
+        )}
         {showTimePicker && (
-          <View style={styles.pickerContainer}>
-            <DateTimePicker
-              value={loggedAt}
-              mode="time"
-              is24Hour
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              themeVariant="dark"
-              onChange={(_event: DateTimePickerEvent, date?: Date) => {
-                if (Platform.OS !== 'ios') setShowTimePicker(false);
-                if (date) {
-                  // If selected time is in the future, user means yesterday at that time
-                  const adjusted = date.getTime() > Date.now()
-                    ? new Date(date.getTime() - 24 * 60 * 60 * 1000)
-                    : date;
-                  setLoggedAt(adjusted);
-                }
-              }}
-            />
-            {Platform.OS === 'ios' && (
-              <Pressable onPress={() => setShowTimePicker(false)} style={styles.pickerDone}>
-                <Text style={styles.pickerDoneText}>Done</Text>
-              </Pressable>
-            )}
-          </View>
+          <DateTimePicker
+            value={loggedAt}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_event: DateTimePickerEvent, date?: Date) => {
+              setShowTimePicker(false);
+              if (date) setLoggedAt(applyLateEntryTime(date));
+            }}
+          />
         )}
 
         {/* Save */}
@@ -385,15 +395,16 @@ const styles = StyleSheet.create({
     color: '#8E8E93', fontSize: 13, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8,
   },
-  timeRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#1C1C1E', borderRadius: 12, padding: 16, marginBottom: 24,
+  lateEntryToggle: {
+    borderWidth: 1, borderColor: '#3A3A3C', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start',
+    marginBottom: 16,
   },
-  timeText: { color: '#FFFFFF', fontSize: 17 },
-  timeChange: { color: '#0A84FF', fontSize: 15 },
-  pickerContainer: { backgroundColor: '#1C1C1E', borderRadius: 12, marginBottom: 24, overflow: 'hidden' },
-  pickerDone: { alignItems: 'flex-end', paddingHorizontal: 16, paddingBottom: 12 },
-  pickerDoneText: { color: '#0A84FF', fontSize: 15, fontWeight: '600' },
+  lateEntryToggleActive: { borderColor: '#0A84FF', backgroundColor: '#0A1A3A' },
+  lateEntryToggleText: { fontSize: 14, color: '#8E8E93' },
+  lateEntryToggleTextActive: { color: '#0A84FF', fontWeight: '600' },
+  timeDisplay: { alignSelf: 'flex-start', paddingVertical: 4, marginBottom: 16 },
+  timeDisplayText: { fontSize: 15, color: '#0A84FF', fontWeight: '600' },
   input: {
     backgroundColor: '#1C1C1E', color: '#FFFFFF',
     fontSize: 17, padding: 16, borderRadius: 12, marginBottom: 24,
