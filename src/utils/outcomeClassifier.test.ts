@@ -37,8 +37,8 @@ test('returns DARK_AMBER when endGlucose > 10.0 and < 14.0', () => {
   expect(classifyOutcome(makeResponse({ isPartial: false, peakGlucose: 11.0, endGlucose: 11.5 }))).toBe('DARK_AMBER');
 });
 
-test('returns RED when endGlucose < 3.9 (hypo)', () => {
-  expect(classifyOutcome(makeResponse({ isPartial: false, peakGlucose: 8.0, endGlucose: 3.5 }))).toBe('RED');
+test('returns HYPO when endGlucose < 3.9', () => {
+  expect(classifyOutcome(makeResponse({ isPartial: false, peakGlucose: 8.0, endGlucose: 3.5 }))).toBe('HYPO');
 });
 
 test('returns RED when endGlucose >= 14.0 (extreme high)', () => {

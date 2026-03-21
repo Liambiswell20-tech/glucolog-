@@ -142,9 +142,9 @@ describe('MatchingSlot: "Went well" only when classifyOutcome returns GREEN', ()
     expect(badge === 'GREEN').toBe(false);
   });
 
-  it('does NOT show "Went well" for RED outcome (end glucose low)', () => {
+  it('does NOT show "Went well" for HYPO outcome (end glucose low)', () => {
     const gr = makeGlucoseResponse({ peakGlucose: 9.0, endGlucose: 3.0 });
-    expect(classifyOutcome(gr)).toBe('RED');
+    expect(classifyOutcome(gr)).toBe('HYPO');
     const badge = classifyOutcome(gr);
     expect(badge === 'GREEN').toBe(false);
   });
