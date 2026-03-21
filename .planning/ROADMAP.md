@@ -67,7 +67,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Wave 0: Create matching.test.ts covering findSimilarSessions contract (null return, exclusion rules, MAX_MATCHES cap)
+- [x] 03-01-PLAN.md — Wave 0: Create matching.test.ts covering findSimilarSessions contract (null return, exclusion rules, MAX_MATCHES cap)
 - [ ] 03-02-PLAN.md — Wave 2: Extract glucoseColor util, widen MatchingSlotProps type, build MatchingSlot in ExpandableCard, wire allSessions through MealHistoryScreen
 - [ ] 03-03-PLAN.md — Wave 3: Add debounced live matching and insulin hint to MealLogScreen
 - [ ] 03-04-PLAN.md — Wave 4: Human verification checkpoint (Tests A–F)
@@ -117,7 +117,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 |-------|----------------|--------|-----------|
 | 1. Tech Debt and Foundation Fixes | 4/4 | Complete   | 2026-03-21 |
 | 2. History Refactor and Core UX Components | 5/6 | In Progress|  |
-| 3. Intelligence Layer — Matching and Outcome Surfacing | 0/4 | Not started | - |
+| 3. Intelligence Layer — Matching and Outcome Surfacing | 1/4 | In Progress|  |
 | 4. HomeScreen Glucose Graph and HbA1c Disclaimer | 0/TBD | Not started | - |
 | 5. Data Model Extensions and Editing | 0/TBD | Not started | - |
 | 6. Route to Market | 0/3 | Planned | - |
@@ -127,7 +127,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 7 to break down)
