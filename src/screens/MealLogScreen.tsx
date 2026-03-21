@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,13 +16,19 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { fetchAndStoreCurve, saveMeal } from '../services/storage';
+import { fetchAndStoreCurve, loadSessionsWithMeals, saveMeal } from '../services/storage';
+import type { SessionWithMeals } from '../services/storage';
 import { fetchGlucoseRange, fetchLatestGlucose } from '../services/nightscout';
 import {
   estimateCarbsFromPhoto,
   getRemainingEstimates,
   RateLimitError,
 } from '../services/carbEstimate';
+import { findSimilarSessions } from '../services/matching';
+import type { SessionMatch } from '../services/matching';
+import { classifyOutcome } from '../utils/outcomeClassifier';
+import { glucoseColor } from '../utils/glucoseColor';
+import { OutcomeBadge } from '../components/OutcomeBadge';
 
 function applyLateEntryTime(selectedTime: Date): Date {
   const now = new Date();
@@ -64,12 +71,56 @@ export default function MealLogScreen() {
   const [estimatesLeft, setEstimatesLeft] = useState<number>(10);
   const [rateLimitHit, setRateLimitHit] = useState(false);
 
+  // Live matching state (Phase 3)
+  const [liveMatches, setLiveMatches] = useState<SessionMatch[]>([]);
+  const [insulinHint, setInsulinHint] = useState<number | null>(null);
+
   useEffect(() => {
     getRemainingEstimates().then(n => {
       setEstimatesLeft(n);
       if (n <= 0) setRateLimitHit(true);
     });
   }, []);
+
+  // Debounced live matching — fires 300ms after mealName changes
+  useEffect(() => {
+    // Clear stale hint whenever meal name changes
+    setInsulinHint(null);
+
+    if (mealName.trim().length < 2) {
+      setLiveMatches([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const allSessions = await loadSessionsWithMeals();
+        const syntheticSession: SessionWithMeals = {
+          id: '__live_search__',
+          mealIds: [],
+          startedAt: new Date().toISOString(),
+          confidence: 'high',
+          glucoseResponse: null,
+          meals: [{
+            id: '__live_search_meal__',
+            name: mealName.trim(),
+            photoUri: null,
+            insulinUnits: 0,
+            startGlucose: null,
+            carbsEstimated: null,
+            loggedAt: new Date().toISOString(),
+            sessionId: '__live_search__',
+            glucoseResponse: null,
+          }],
+        };
+        const summary = findSimilarSessions(syntheticSession, allSessions);
+        setLiveMatches(summary?.matches ?? []);
+      } catch {
+        // Silent failure — hide list, do not show error (per 03-UI-SPEC.md error state)
+        setLiveMatches([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [mealName]);
 
   // Clear estimate when photo changes
   function setPhoto(uri: string | null) {
@@ -258,8 +309,71 @@ export default function MealLogScreen() {
           returnKeyType="next"
         />
 
+        {/* Live match list — appears below meal name input when matches exist */}
+        {liveMatches.length > 0 && (
+          <View style={styles.liveMatchContainer}>
+            {liveMatches.map((match, index) => {
+              const sessionInsulin = match.session.meals.reduce(
+                (sum, m) => sum + (m.insulinUnits ?? 0), 0
+              );
+              const firstName = match.session.meals[0]?.name ?? '';
+              const dateStr = new Date(match.session.startedAt).toLocaleDateString('en-GB', {
+                weekday: 'short', day: 'numeric', month: 'short',
+              });
+              const peak = match.session.glucoseResponse!.peakGlucose;
+              const badge = classifyOutcome(match.session.glucoseResponse);
+              const rowConfidenceLow = match.session.confidence !== 'high';
+
+              return (
+                <Pressable
+                  key={match.session.id}
+                  style={[styles.liveMatchRow, index > 0 && styles.liveMatchRowDivider]}
+                  onPress={() => {
+                    setMealName(firstName);
+                    setInsulinHint(sessionInsulin);
+                    setLiveMatches([]);
+                    Keyboard.dismiss();
+                  }}
+                  hitSlop={8}
+                >
+                  {/* Row primary: name + units + date + peak */}
+                  <View style={styles.liveMatchRowPrimary}>
+                    <Text style={styles.liveMatchRowName} numberOfLines={1}>
+                      {firstName} — {sessionInsulin}u
+                    </Text>
+                    <Text style={styles.liveMatchRowDate}>{dateStr}</Text>
+                    <Text style={[styles.liveMatchRowPeak, { color: glucoseColor(peak) }]}>
+                      peak {peak.toFixed(1)} mmol/L
+                    </Text>
+                  </View>
+                  {/* Row secondary: badge + Went well */}
+                  <View style={styles.liveMatchBadgeRow}>
+                    <OutcomeBadge badge={badge} size="small" />
+                    {badge === 'GREEN' && (
+                      <View style={styles.wentWellIndicator}>
+                        <View style={styles.wentWellDot} />
+                        <Text style={styles.wentWellText}>Went well</Text>
+                      </View>
+                    )}
+                  </View>
+                  {rowConfidenceLow && (
+                    <Text style={styles.liveMatchConfidenceWarning}>
+                      Other meals may have affected these results
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
         {/* Insulin units */}
-        <Text style={styles.label}>Insulin units</Text>
+        <View style={styles.insulinLabelRow}>
+          <Text style={styles.label}>Insulin units</Text>
+          {insulinHint !== null && (
+            <Text style={styles.insulinHintText}>({insulinHint}u last time)</Text>
+          )}
+        </View>
         <TextInput
           style={styles.input}
           placeholder="e.g. 6"
@@ -431,6 +545,82 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1C1E', color: '#FFFFFF',
     fontSize: 17, padding: 16, borderRadius: 12, marginBottom: 24,
   },
+
+  // Live matching styles (Phase 3)
+  liveMatchContainer: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  liveMatchRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  liveMatchRowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: '#2C2C2E',
+  },
+  liveMatchRowPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  liveMatchRowName: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    flex: 1,
+    minWidth: 0,
+  },
+  liveMatchRowDate: {
+    fontSize: 12,
+    color: '#636366',
+  },
+  liveMatchRowPeak: {
+    fontSize: 12,
+    // color applied inline via glucoseColor()
+  },
+  liveMatchBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  wentWellIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  wentWellDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#30D158',
+  },
+  wentWellText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#30D158',
+  },
+  liveMatchConfidenceWarning: {
+    fontSize: 11,
+    color: '#636366',
+    fontStyle: 'italic',
+  },
+  insulinLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  insulinHintText: {
+    fontSize: 12,
+    color: '#636366',
+    fontStyle: 'italic',
+  },
+
   saveBtn: {
     backgroundColor: '#30D158', borderRadius: 14,
     padding: 18, alignItems: 'center', marginTop: 8,
