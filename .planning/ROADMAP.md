@@ -33,7 +33,7 @@ Milestone 2 transforms BolusBrain from a data-collection app into an intelligent
 Plans:
 - [x] 01-01-PLAN.md — Install Jest + jest-expo, extract classifyOutcome pure function, badge classification tests (6 states)
 - [ ] 01-02-PLAN.md — Fix GlucoseStore.sum drift (DEBT-02), extract buildGlucoseResponse (DEBT-03), wrap JSON.parse in try/catch (DEBT-07), HbA1c + session grouping tests (TEST-01)
-- [ ] 01-03-PLAN.md — Migrate carbEstimate.ts to File class API (DEBT-04), fetchGlucosesSince error logging (DEBT-05), canonical curve docs in CLAUDE.md and storage.ts (DEBT-06)
+- [x] 01-03-PLAN.md — Migrate carbEstimate.ts to File class API (DEBT-04), fetchGlucosesSince error logging (DEBT-05), canonical curve docs in CLAUDE.md and storage.ts (DEBT-06)
 - [ ] 01-04-PLAN.md — GitHub Actions CI workflow, phase verification checkpoint
 
 ### Phase 2: History Refactor and Core UX Components
@@ -101,7 +101,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Tech Debt and Foundation Fixes | 1/4 | In Progress|  |
+| 1. Tech Debt and Foundation Fixes | 2/4 | In Progress|  |
 | 2. History Refactor and Core UX Components | 0/TBD | Not started | - |
 | 3. Intelligence Layer — Matching and Outcome Surfacing | 0/TBD | Not started | - |
 | 4. HomeScreen Glucose Graph and HbA1c Disclaimer | 0/TBD | Not started | - |
