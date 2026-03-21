@@ -31,7 +31,7 @@
   - **Pending**: `isPartial = true` (curve not yet complete — no classification)
   - **None**: no `glucoseResponse` (never fetched)
 - [ ] **HIST-04**: User can edit a previously logged insulin dose to correct a mistake — corrected value persists in storage
-- [ ] **HIST-05**: User can tap "Late Entry" when logging a meal or insulin dose, select an earlier time that day, and have the glucose curve fetched from that earlier time rather than the current time
+- [x] **HIST-05**: User can tap "Late Entry" when logging a meal or insulin dose, select an earlier time that day, and have the glucose curve fetched from that earlier time rather than the current time
 - [ ] **HIST-06**: All legacy meals (pre-session data, no sessionId) are migrated to proper session records on first launch after Phase 2 ships — migration is idempotent, runs once, and is logged
 
 ### Pattern Intelligence
@@ -98,7 +98,7 @@
 | HIST-01 | Phase 2 | Complete |
 | HIST-02 | Phase 2 | Complete |
 | HIST-03 | Phase 2 | Complete |
-| HIST-05 | Phase 2 | Pending |
+| HIST-05 | Phase 2 | Complete |
 | HIST-06 | Phase 2 | Pending |
 | PATT-01 | Phase 3 | Pending |
 | PATT-02 | Phase 3 | Pending |
