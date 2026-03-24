@@ -30,6 +30,7 @@ export function AveragedStatsPanel({ summary }: AveragedStatsPanelProps) {
           <Text style={styles.statUnit}>mins</Text>
         </View>
       </View>
+      <Text style={styles.disclaimer}>Results may vary if multiple meals were eaten within the same 3-hour window.</Text>
     </View>
   );
 }
@@ -64,4 +65,11 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   statUnit: { fontSize: 9, color: '#636366' },
+  disclaimer: {
+    fontSize: 10,
+    color: '#636366',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 14,
+  },
 });

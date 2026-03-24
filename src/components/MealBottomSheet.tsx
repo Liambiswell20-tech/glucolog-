@@ -127,8 +127,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1C1E',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
-    minHeight: 200,
+    maxHeight: '92%',
+    minHeight: 300,
     paddingBottom: 24,
   },
   handle: {
