@@ -81,7 +81,16 @@ Plans:
   2. Tapping the estimated HbA1c value shows a modal that reads: "Please be aware HbA1c is usually calculated over 90 days. You should get accurate testing and take guidance from your diabetes team."
   3. Quick log buttons on HomeScreen are visually centred on screen
   4. User can tap an insulin log entry to edit the dose — the corrected value is saved and the original is preserved
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Wave 1: Extract formatDate utility, create glucoseToArcAngle pure function, create theme.ts
+- [ ] 04-02-PLAN.md — Wave 1: Harden all AsyncStorage.getItem calls in storage.ts with try/catch (HIST-04 storage hardening)
+- [ ] 04-03-PLAN.md — Wave 2: Create SafetyDisclaimer and AveragedStatsPanel components
+- [ ] 04-04-PLAN.md — Wave 2: Create MealHistoryCard (rename from ExpandableCard, tap-to-open-sheet) and MealBottomSheet
+- [ ] 04-05-PLAN.md — Wave 3: Wire MealHistoryScreen to MealHistoryCard + MealBottomSheet; wire MealLogScreen to AveragedStatsPanel
+- [ ] 04-06-PLAN.md — Wave 3: HomeScreen full redesign (arc gauge, HbA1c modal, centred buttons, animations) + App.tsx font loading
+- [ ] 04-07-PLAN.md — Wave 4: Unit tests for all new Phase 4 utilities and components
 
 ### Phase 5: Data Model Extensions and Editing
 **Goal**: The app captures AI carb estimate confidence for future safety surfacing, tracks long-acting insulin effectiveness via an overnight glucose window, and stores both without requiring migration scripts
@@ -118,7 +127,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 | 1. Tech Debt and Foundation Fixes | 4/4 | Complete   | 2026-03-21 |
 | 2. History Refactor and Core UX Components | 5/6 | In Progress|  |
 | 3. Intelligence Layer — Matching and Outcome Surfacing | 3/4 | In Progress|  |
-| 4. HomeScreen Glucose Graph and HbA1c Disclaimer | 0/TBD | Not started | - |
+| 4. HomeScreen Glucose Graph and HbA1c Disclaimer | 0/7 | Planned | - |
 | 5. Data Model Extensions and Editing | 0/TBD | Not started | - |
 | 6. Route to Market | 0/3 | Planned | - |
 
