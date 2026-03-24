@@ -57,12 +57,12 @@ export async function saveInsulinLog(
 }
 
 export async function loadInsulinLogs(): Promise<InsulinLog[]> {
-  const raw = await AsyncStorage.getItem(INSULIN_LOGS_KEY);
-  if (!raw) return [];
   try {
+    const raw = await AsyncStorage.getItem(INSULIN_LOGS_KEY);
+    if (!raw) return [];
     return JSON.parse(raw) as InsulinLog[];
   } catch {
-    console.warn('[storage] loadInsulinLogs: corrupt data, returning []');
+    console.warn('[storage] loadInsulinLogs: getItem/parse failed', INSULIN_LOGS_KEY);
     return [];
   }
 }
@@ -114,12 +114,12 @@ export interface GlucoseStore {
 }
 
 export async function loadGlucoseStore(): Promise<GlucoseStore | null> {
-  const raw = await AsyncStorage.getItem(GLUCOSE_STORE_KEY);
-  if (!raw) return null;
   try {
+    const raw = await AsyncStorage.getItem(GLUCOSE_STORE_KEY);
+    if (!raw) return null;
     return JSON.parse(raw) as GlucoseStore;
   } catch {
-    console.warn('[storage] loadGlucoseStore: corrupt data, returning null');
+    console.warn('[storage] loadGlucoseStore: getItem/parse failed', GLUCOSE_STORE_KEY);
     return null;
   }
 }
@@ -181,14 +181,14 @@ export interface Hba1cEstimate {
 }
 
 export async function loadCachedHba1c(): Promise<Hba1cEstimate | null> {
-  const raw = await AsyncStorage.getItem(HBA1C_CACHE_KEY);
-  if (!raw) return null;
   try {
+    const raw = await AsyncStorage.getItem(HBA1C_CACHE_KEY);
+    if (!raw) return null;
     const cached = JSON.parse(raw) as Hba1cEstimate;
     const today = new Date().toISOString().slice(0, 10);
     return cached.calculatedDate === today ? cached : null;
   } catch {
-    console.warn('[storage] loadCachedHba1c: corrupt data, returning null');
+    console.warn('[storage] loadCachedHba1c: getItem/parse failed', HBA1C_CACHE_KEY);
     return null;
   }
 }
@@ -251,12 +251,12 @@ export interface SessionWithMeals extends Session {
 // --- raw storage helpers ---
 
 async function loadMealsRaw(): Promise<Meal[]> {
-  const raw = await AsyncStorage.getItem(MEALS_KEY);
-  if (!raw) return [];
   try {
+    const raw = await AsyncStorage.getItem(MEALS_KEY);
+    if (!raw) return [];
     return JSON.parse(raw) as Meal[];
   } catch {
-    console.warn('[storage] loadMealsRaw: corrupt data, returning []');
+    console.warn('[storage] loadMealsRaw: getItem/parse failed', MEALS_KEY);
     return [];
   }
 }
@@ -266,12 +266,12 @@ async function saveMealsRaw(meals: Meal[]): Promise<void> {
 }
 
 async function loadSessionsRaw(): Promise<Session[]> {
-  const raw = await AsyncStorage.getItem(SESSIONS_KEY);
-  if (!raw) return [];
   try {
+    const raw = await AsyncStorage.getItem(SESSIONS_KEY);
+    if (!raw) return [];
     return JSON.parse(raw) as Session[];
   } catch {
-    console.warn('[storage] loadSessionsRaw: corrupt data, returning []');
+    console.warn('[storage] loadSessionsRaw: getItem/parse failed', SESSIONS_KEY);
     return [];
   }
 }
