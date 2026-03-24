@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,12 +16,30 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import GlucoseDisplay from '../components/GlucoseDisplay';
+import Svg, { Path } from 'react-native-svg';
 import { fetchLatestGlucose, fetchGlucosesSince, GlucoseReading } from '../services/nightscout';
 import { fetchAndStoreCurve, saveMeal, loadGlucoseStore, updateGlucoseStore, loadCachedHba1c, computeAndCacheHba1c, Hba1cEstimate } from '../services/storage';
+import { glucoseToArcAngle } from '../utils/glucoseToArcAngle';
+import { COLORS, FONTS } from '../theme';
 import type { RootStackParamList } from '../../App';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+// ─── Arc gauge helpers ────────────────────────────────────────────────────────
+
+function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
+  const rad = (angleDeg - 90) * (Math.PI / 180);
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
+  const start = polarToCartesian(cx, cy, r, startDeg);
+  const end = polarToCartesian(cx, cy, r, endDeg);
+  const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -37,6 +56,32 @@ export default function HomeScreen() {
   const [snackUnits, setSnackUnits] = useState('');
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
+
+  // HbA1c disclaimer modal
+  const [hba1cModalVisible, setHba1cModalVisible] = useState(false);
+
+  // Animations
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
+
+  // LIVE dot pulse loop
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [pulseAnim]);
+
+  // Staggered card entrance after data loads
+  useEffect(() => {
+    if (!loading) {
+      Animated.stagger(80, cardAnims.map(anim =>
+        Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 })
+      )).start();
+    }
+  }, [loading]);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -114,12 +159,18 @@ export default function HomeScreen() {
     }
   }
 
+  // Derive glucose arc angle and colour
+  const arcAngle = reading ? (glucoseToArcAngle(reading.mmol) ?? -135) : -135;
+  const glucoseColour = reading
+    ? (reading.mmol < 3.9 ? COLORS.red : reading.mmol > 10 ? COLORS.amber : COLORS.green)
+    : COLORS.textSecondary;
+
   return (
     <>
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor="#8E8E93" />
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor={COLORS.textSecondary} />
         }
       >
         {/* Header */}
@@ -133,69 +184,133 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Glucose card */}
-        <View style={styles.card}>
-          {loading && !reading ? (
-            <ActivityIndicator size="large" color="#30D158" />
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorIcon}>!</Text>
-              <Text style={styles.errorText}>{error}</Text>
-              <Text style={styles.errorHint}>Pull down to retry</Text>
-            </View>
-          ) : reading ? (
-            <GlucoseDisplay reading={reading} />
-          ) : null}
+        {/* Arc gauge — 270° sweep, -135° to +135° */}
+        <View style={styles.gaugeContainer}>
+          <Svg width={260} height={200} viewBox="0 0 260 200">
+            {/* Track arc (full 270°) */}
+            <Path
+              d={arcPath(130, 140, 100, -135, 135)}
+              stroke={COLORS.surfaceRaised}
+              strokeWidth={14}
+              fill="none"
+              strokeLinecap="round"
+            />
+            {/* Value arc — fills from -135° to current glucose angle */}
+            {reading && (
+              <Path
+                d={arcPath(130, 140, 100, -135, arcAngle)}
+                stroke={glucoseColour}
+                strokeWidth={14}
+                fill="none"
+                strokeLinecap="round"
+              />
+            )}
+          </Svg>
+
+          {/* Glucose value overlay — positioned absolutely in centre */}
+          <View style={styles.gaugeCenter}>
+            {loading && !reading ? (
+              <ActivityIndicator size="large" color={COLORS.green} />
+            ) : error ? (
+              <Text style={styles.gaugeError}>!</Text>
+            ) : (
+              <>
+                <Text style={[styles.glucoseValue, { color: glucoseColour }]}>
+                  {reading ? reading.mmol.toFixed(1) : '– –'}
+                </Text>
+                <Text style={styles.glucoseUnit}>mmol/L</Text>
+                {reading && (
+                  <View style={styles.liveRow}>
+                    <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+                    <Text style={styles.liveText}>LIVE</Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
         </View>
 
-        {/* 12hr average + est. HbA1c */}
-        <View style={styles.avgBox}>
-          <View style={styles.avgSection}>
-            <Text style={styles.avgLabel}>12hr average</Text>
+        {/* Stats row: 12HR AVG + EST. HBA1C */}
+        <Animated.View
+          style={[
+            styles.statsRow,
+            {
+              opacity: cardAnims[0],
+              transform: [{ scale: cardAnims[0].interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
+            },
+          ]}
+        >
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>12HR AVG</Text>
             {avg12h !== null ? (
-              <Text style={[styles.avgValue, { color: avg12h < 3.9 ? '#FF3B30' : avg12h > 10 ? '#FF9500' : '#30D158' }]}>
+              <Text style={[styles.statValue, { color: avg12h < 3.9 ? COLORS.red : avg12h > 10 ? COLORS.amber : COLORS.green }]}>
                 {avg12h.toFixed(1)}
               </Text>
             ) : (
-              <Text style={styles.avgValue}>—</Text>
+              <Text style={styles.statValue}>—</Text>
             )}
-            <Text style={styles.avgUnit}>mmol/L</Text>
+            <Text style={styles.statUnit}>mmol/L</Text>
           </View>
 
-          <View style={styles.avgDivider} />
-
-          <View style={styles.avgSection}>
-            <Text style={styles.avgLabel}>
-              est. HbA1c{hba1c ? ` (${hba1c.daysOfData}d)` : ''}
+          <Pressable style={styles.statCard} onPress={() => hba1c && setHba1cModalVisible(true)}>
+            <Text style={styles.statLabel}>
+              EST. HBA1C{hba1c ? ` (${hba1c.daysOfData}d)` : ''}
             </Text>
             {hba1c ? (
               <>
-                <Text style={styles.avgValue}>{hba1c.percent}%</Text>
-                <Text style={styles.avgUnit}>{hba1c.mmolMol} mmol/mol</Text>
+                <Text style={styles.statValue}>{hba1c.percent}%</Text>
+                <Text style={styles.statUnit}>{hba1c.mmolMol} mmol/mol</Text>
               </>
             ) : (
-              <Text style={styles.avgValue}>—</Text>
+              <Text style={styles.statValue}>—</Text>
             )}
-          </View>
-        </View>
+            {hba1c && <Text style={styles.tapHint}>Tap for info</Text>}
+          </Pressable>
+        </Animated.View>
 
         {/* Primary actions */}
-        <View style={styles.actionRow}>
+        <Animated.View
+          style={[
+            styles.actionRow,
+            {
+              opacity: cardAnims[1],
+              transform: [{ scale: cardAnims[1].interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
+            },
+          ]}
+        >
           <Pressable style={styles.logMealBtn} onPress={() => navigation.navigate('MealLog')}>
             <Text style={styles.logMealBtnText}>+ Log meal</Text>
           </Pressable>
           <Pressable style={styles.historyBtn} onPress={() => navigation.navigate('MealHistory')}>
             <Text style={styles.historyBtnText}>History</Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
         {/* Quick log snack */}
-        <Pressable style={styles.quickLogBtn} onPress={openQuickLog}>
-          <Text style={styles.quickLogBtnText}>⚡ Quick log snack</Text>
-        </Pressable>
+        <Animated.View
+          style={[
+            { width: '100%' },
+            {
+              opacity: cardAnims[2],
+              transform: [{ scale: cardAnims[2].interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
+            },
+          ]}
+        >
+          <Pressable style={styles.quickLogBtn} onPress={openQuickLog}>
+            <Text style={styles.quickLogBtnText}>⚡ Quick log snack</Text>
+          </Pressable>
+        </Animated.View>
 
         {/* Insulin / tablet row — 3 buttons */}
-        <View style={styles.insulinRow}>
+        <Animated.View
+          style={[
+            styles.insulinRow,
+            {
+              opacity: cardAnims[3],
+              transform: [{ scale: cardAnims[3].interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
+            },
+          ]}
+        >
           <Pressable
             style={styles.insulinBtn}
             onPress={() => navigation.navigate('InsulinLog', { type: 'long-acting' })}
@@ -217,22 +332,22 @@ export default function HomeScreen() {
             <Text style={styles.insulinBtnEmoji}>💊</Text>
             <Text style={styles.insulinBtnText}>Tablets</Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
         {/* Compact range guide */}
         <View style={styles.rangeKey}>
           <Text style={styles.rangeKeyTitle}>Range guide</Text>
           <View style={styles.rangeCompactRow}>
             <View style={styles.rangeCompactItem}>
-              <View style={[styles.dot, { backgroundColor: '#FF3B30' }]} />
+              <View style={[styles.dot, { backgroundColor: COLORS.red }]} />
               <Text style={styles.rangeLabel}>Low &lt;3.9</Text>
             </View>
             <View style={styles.rangeCompactItem}>
-              <View style={[styles.dot, { backgroundColor: '#30D158' }]} />
+              <View style={[styles.dot, { backgroundColor: COLORS.green }]} />
               <Text style={styles.rangeLabel}>In range 3.9–10</Text>
             </View>
             <View style={styles.rangeCompactItem}>
-              <View style={[styles.dot, { backgroundColor: '#FF9500' }]} />
+              <View style={[styles.dot, { backgroundColor: COLORS.amber }]} />
               <Text style={styles.rangeLabel}>High &gt;10</Text>
             </View>
           </View>
@@ -282,6 +397,30 @@ export default function HomeScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* HbA1c disclaimer modal (HOME-02) */}
+      <Modal
+        visible={hba1cModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setHba1cModalVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setHba1cModalVisible(false)} />
+        <View style={styles.hba1cModalWrapper}>
+          <View style={styles.hba1cModalSheet}>
+            <Text style={styles.hba1cModalTitle}>About this estimate</Text>
+            <Text style={styles.hba1cModalBody}>
+              Please be aware HbA1c is usually calculated over 90 days. You should get accurate testing and take guidance from your diabetes team.
+            </Text>
+            <Pressable
+              style={styles.hba1cModalClose}
+              onPress={() => setHba1cModalVisible(false)}
+            >
+              <Text style={styles.hba1cModalCloseText}>OK</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -289,7 +428,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background,
     alignItems: 'center',
     paddingTop: 56,
     paddingBottom: 40,
@@ -302,21 +441,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 8,
   },
   headerTitle: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: COLORS.text,
     letterSpacing: 0.5,
+    fontFamily: FONTS.semiBold,
   },
   headerSub: {
     fontSize: 12,
-    color: '#636366',
+    color: COLORS.textMuted,
     marginTop: 1,
+    fontFamily: FONTS.regular,
   },
   settingsBtn: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -325,90 +466,143 @@ const styles = StyleSheet.create({
   },
   settingsIcon: { fontSize: 18 },
 
-  // Glucose card
-  card: {
-    width: '100%',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 24,
-    padding: 36,
+  // Arc gauge
+  gaugeContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 180,
-    marginBottom: 12,
-  },
-  errorContainer: { alignItems: 'center', gap: 8 },
-  errorIcon: { fontSize: 36, color: '#FF3B30' },
-  errorText: { fontSize: 16, color: '#FF3B30', textAlign: 'center' },
-  errorHint: { fontSize: 13, color: '#8E8E93' },
-
-  // 12hr average + HbA1c
-  avgBox: {
+    position: 'relative',
+    height: 200,
     width: '100%',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  gaugeCenter: {
+    position: 'absolute',
+    top: 60,
+    alignItems: 'center',
+    gap: 4,
+  },
+  gaugeError: {
+    fontSize: 36,
+    color: COLORS.red,
+  },
+  glucoseValue: {
+    fontSize: 52,
+    fontWeight: '700',
+    fontFamily: FONTS.mono,
+  },
+  glucoseUnit: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.regular,
+  },
+  liveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 0,
+    gap: 6,
+    marginTop: 2,
   },
-  avgSection: { flex: 1, gap: 2 },
-  avgDivider: { width: 1, backgroundColor: '#2C2C2E', alignSelf: 'stretch', marginHorizontal: 16 },
-  avgLabel: { fontSize: 11, color: '#636366', textTransform: 'uppercase', letterSpacing: 0.8 },
-  avgValue: { fontSize: 26, fontWeight: '700', color: '#8E8E93' },
-  avgUnit: { fontSize: 13, color: '#636366' },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.green,
+  },
+  liveText: {
+    fontSize: 10,
+    color: COLORS.green,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    fontFamily: FONTS.semiBold,
+  },
+
+  // Stats row
+  statsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 14,
+    gap: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontFamily: FONTS.regular,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.mono,
+  },
+  statUnit: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+  },
+  tapHint: {
+    fontSize: 10,
+    color: COLORS.blue,
+    marginTop: 2,
+    fontFamily: FONTS.regular,
+  },
 
   // Actions
   actionRow: { width: '100%', flexDirection: 'row', gap: 10, marginBottom: 10 },
   logMealBtn: {
     flex: 1,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#30D158',
+    borderColor: COLORS.green,
   },
-  logMealBtnText: { color: '#30D158', fontSize: 16, fontWeight: '600' },
+  logMealBtnText: { color: COLORS.green, fontSize: 16, fontWeight: '600', fontFamily: FONTS.semiBold },
   historyBtn: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     paddingHorizontal: 18,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  historyBtnText: { color: '#8E8E93', fontSize: 16, fontWeight: '600' },
+  historyBtnText: { color: COLORS.textSecondary, fontSize: 16, fontWeight: '600', fontFamily: FONTS.semiBold },
 
   // Quick log
   quickLogBtn: {
     width: '100%',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     padding: 14,
     alignItems: 'center',
     marginBottom: 10,
   },
-  quickLogBtnText: { color: '#FF9F0A', fontSize: 15, fontWeight: '600' },
+  quickLogBtnText: { color: '#FF9F0A', fontSize: 15, fontWeight: '600', fontFamily: FONTS.semiBold },
 
   // Insulin row — 3 buttons
   insulinRow: { width: '100%', flexDirection: 'row', gap: 10, marginBottom: 16 },
   insulinBtn: {
     flex: 1,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     gap: 5,
   },
   insulinBtnEmoji: { fontSize: 20 },
-  insulinBtnText: { color: '#8E8E93', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  insulinBtnText: { color: COLORS.textSecondary, fontSize: 11, fontWeight: '600', textAlign: 'center', fontFamily: FONTS.regular },
 
   // Compact range guide
   rangeKey: {
     width: '100%',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -417,20 +611,23 @@ const styles = StyleSheet.create({
   rangeKeyTitle: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#636366',
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1,
+    fontFamily: FONTS.semiBold,
   },
   rangeCompactRow: { flexDirection: 'row', justifyContent: 'space-between' },
   rangeCompactItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  rangeLabel: { fontSize: 12, color: '#8E8E93' },
+  rangeLabel: { fontSize: 12, color: COLORS.textSecondary, fontFamily: FONTS.regular },
 
-  // Modal
+  // Modal (shared backdrop)
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+
+  // Quick log modal
   modalWrapper: { justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
@@ -440,19 +637,64 @@ const styles = StyleSheet.create({
     width: 36, height: 4, backgroundColor: '#48484A',
     borderRadius: 2, alignSelf: 'center', marginBottom: 20,
   },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 24 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 24, fontFamily: FONTS.semiBold },
   label: {
-    color: '#8E8E93', fontSize: 13, fontWeight: '600',
+    color: COLORS.textSecondary, fontSize: 13, fontWeight: '600',
     textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8,
+    fontFamily: FONTS.semiBold,
   },
   input: {
-    backgroundColor: '#2C2C2E', color: '#FFFFFF',
+    backgroundColor: COLORS.surfaceRaised, color: COLORS.text,
     fontSize: 17, padding: 16, borderRadius: 12, marginBottom: 20,
+    fontFamily: FONTS.regular,
   },
   saveBtn: {
     backgroundColor: '#FF9F0A', borderRadius: 14,
     padding: 18, alignItems: 'center', marginTop: 4,
   },
   saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { color: '#000', fontSize: 17, fontWeight: '700' },
+  saveBtnText: { color: '#000', fontSize: 17, fontWeight: '700', fontFamily: FONTS.semiBold },
+
+  // HbA1c disclaimer modal
+  hba1cModalWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  hba1cModalSheet: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 24,
+    gap: 16,
+    width: '100%',
+  },
+  hba1cModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    fontFamily: FONTS.semiBold,
+  },
+  hba1cModalBody: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
+    fontFamily: FONTS.regular,
+  },
+  hba1cModalClose: {
+    backgroundColor: COLORS.blue,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  hba1cModalCloseText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: FONTS.semiBold,
+  },
 });
