@@ -23,10 +23,12 @@ import {
   getRemainingEstimates,
   RateLimitError,
 } from '../services/carbEstimate';
-import type { SessionMatch } from '../services/matching';
+import type { SessionMatch, MatchSummary } from '../services/matching';
+import { findSimilarSessions } from '../services/matching';
 import { classifyOutcome } from '../utils/outcomeClassifier';
 import { glucoseColor } from '../utils/glucoseColor';
 import { OutcomeBadge } from '../components/OutcomeBadge';
+import { AveragedStatsPanel } from '../components/AveragedStatsPanel';
 
 function applyLateEntryTime(selectedTime: Date): Date {
   const now = new Date();
@@ -71,6 +73,7 @@ export default function MealLogScreen() {
 
   // Live matching state (Phase 3)
   const [liveMatches, setLiveMatches] = useState<SessionMatch[]>([]);
+  const [matchSummary, setMatchSummary] = useState<MatchSummary | null>(null);
   const [insulinHint, setInsulinHint] = useState<number | null>(null);
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export default function MealLogScreen() {
 
     if (mealName.trim().length < 2) {
       setLiveMatches([]);
+      setMatchSummary(null);
       return;
     }
     const timer = setTimeout(async () => {
@@ -103,9 +107,20 @@ export default function MealLogScreen() {
           .slice(0, 5)
           .map(s => ({ session: s, score: 1 as number }));
         setLiveMatches(matched);
+
+        // Compute averaged stats for AveragedStatsPanel
+        // Use the first matched session as the target to run findSimilarSessions
+        if (matched.length >= 2) {
+          const target = matched[0].session;
+          const summary = findSimilarSessions(target, allSessions);
+          setMatchSummary(summary);
+        } else {
+          setMatchSummary(null);
+        }
       } catch {
         // Silent failure — hide list, do not show error (per 03-UI-SPEC.md error state)
         setLiveMatches([]);
+        setMatchSummary(null);
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -297,6 +312,9 @@ export default function MealLogScreen() {
           onChangeText={setMealName}
           returnKeyType="next"
         />
+
+        {/* Averaged stats panel — appears above live match list when >= 2 matches */}
+        <AveragedStatsPanel summary={matchSummary} />
 
         {/* Live match list — appears below meal name input when matches exist */}
         {liveMatches.length > 0 && (
