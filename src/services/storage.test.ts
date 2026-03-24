@@ -1,5 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { computeAndCacheHba1c, saveMeal } from './storage';
+import {
+  computeAndCacheHba1c,
+  saveMeal,
+  loadInsulinLogs,
+  loadGlucoseStore,
+  loadCachedHba1c,
+  loadMeals,
+  loadSessionsWithMeals,
+} from './storage';
 
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 const baseTime = new Date('2024-01-01T12:00:00Z').getTime();
@@ -54,5 +62,135 @@ describe('saveMeal session grouping', () => {
     );
     expect(second.sessionId).not.toBe(first.sessionId);
     expect(second.sessionId).toBeTruthy();
+  });
+});
+
+// --- Storage hardening: getItem failure returns safe defaults ---
+// Per plan 04-02 and CONTEXT.md decision 8.
+// These tests verify that every load function wraps AsyncStorage.getItem in
+// an outer try/catch so a storage-level failure never crashes the app.
+
+describe('loadInsulinLogs — safe default on getItem failure', () => {
+  it('returns [] when AsyncStorage.getItem throws', async () => {
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    const result = await loadInsulinLogs();
+    expect(result).toEqual([]);
+  });
+
+  it('emits a [storage] warning when AsyncStorage.getItem throws', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    await loadInsulinLogs();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[storage]'),
+      expect.any(String)
+    );
+    warnSpy.mockRestore();
+  });
+});
+
+describe('loadGlucoseStore — safe default on getItem failure', () => {
+  it('returns null when AsyncStorage.getItem throws', async () => {
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    const result = await loadGlucoseStore();
+    expect(result).toBeNull();
+  });
+
+  it('emits a [storage] warning when AsyncStorage.getItem throws', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    await loadGlucoseStore();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[storage]'),
+      expect.any(String)
+    );
+    warnSpy.mockRestore();
+  });
+});
+
+describe('loadCachedHba1c — safe default on getItem failure', () => {
+  it('returns null when AsyncStorage.getItem throws', async () => {
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    const result = await loadCachedHba1c();
+    expect(result).toBeNull();
+  });
+
+  it('emits a [storage] warning when AsyncStorage.getItem throws', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    await loadCachedHba1c();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[storage]'),
+      expect.any(String)
+    );
+    warnSpy.mockRestore();
+  });
+});
+
+describe('loadMeals (via loadMealsRaw) — safe default on getItem failure', () => {
+  it('returns [] when AsyncStorage.getItem throws', async () => {
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    const result = await loadMeals();
+    expect(result).toEqual([]);
+  });
+
+  it('emits a [storage] warning when AsyncStorage.getItem throws', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValueOnce(new Error('storage fail'));
+
+    await loadMeals();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[storage]'),
+      expect.any(String)
+    );
+    warnSpy.mockRestore();
+  });
+});
+
+describe('loadSessionsWithMeals (via loadSessionsRaw + loadMealsRaw) — safe default on getItem failure', () => {
+  it('returns [] when all AsyncStorage.getItem calls throw', async () => {
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValue(new Error('storage fail'));
+
+    const result = await loadSessionsWithMeals();
+    expect(result).toEqual([]);
+  });
+
+  it('emits [storage] warnings when AsyncStorage.getItem throws', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValue(new Error('storage fail'));
+
+    await loadSessionsWithMeals();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[storage]'),
+      expect.any(String)
+    );
+    warnSpy.mockRestore();
   });
 });
