@@ -87,8 +87,8 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Wave 1: Extract formatDate utility, create glucoseToArcAngle pure function, create theme.ts
 - [x] 04-02-PLAN.md — Wave 1: Harden all AsyncStorage.getItem calls in storage.ts with try/catch (HIST-04 storage hardening)
-- [ ] 04-03-PLAN.md — Wave 2: Create SafetyDisclaimer and AveragedStatsPanel components
-- [ ] 04-04-PLAN.md — Wave 2: Create MealHistoryCard (rename from ExpandableCard, tap-to-open-sheet) and MealBottomSheet
+- [x] 04-03-PLAN.md — Wave 2: Create SafetyDisclaimer and AveragedStatsPanel components
+- [x] 04-04-PLAN.md — Wave 2: Create MealHistoryCard (rename from ExpandableCard, tap-to-open-sheet) and MealBottomSheet
 - [ ] 04-05-PLAN.md — Wave 3: Wire MealHistoryScreen to MealHistoryCard + MealBottomSheet; wire MealLogScreen to AveragedStatsPanel
 - [ ] 04-06-PLAN.md — Wave 3: HomeScreen full redesign (arc gauge, HbA1c modal, centred buttons, animations) + App.tsx font loading
 - [ ] 04-07-PLAN.md — Wave 4: Unit tests for all new Phase 4 utilities and components
@@ -128,7 +128,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 | 1. Tech Debt and Foundation Fixes | 4/4 | Complete   | 2026-03-21 |
 | 2. History Refactor and Core UX Components | 5/6 | In Progress|  |
 | 3. Intelligence Layer — Matching and Outcome Surfacing | 3/4 | In Progress|  |
-| 4. Session Grouping, Pattern Recall & HomeScreen Redesign | 2/7 | In Progress|  |
+| 4. Session Grouping, Pattern Recall & HomeScreen Redesign | 4/7 | In Progress|  |
 | 5. Data Model Extensions and Editing | 0/TBD | Not started | - |
 | 6. Route to Market | 0/3 | Planned | - |
 
@@ -137,7 +137,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 **Goal:** [To be planned]
 **Requirements**: TBD
 **Depends on:** Phase 6
-**Plans:** 2/7 plans executed
+**Plans:** 4/7 plans executed
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 7 to break down)
