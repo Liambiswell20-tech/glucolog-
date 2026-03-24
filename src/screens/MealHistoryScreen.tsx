@@ -26,7 +26,7 @@ import { MealHistoryCard } from '../components/MealHistoryCard';
 import { MealBottomSheet } from '../components/MealBottomSheet';
 import { DayGroupHeader } from '../components/DayGroupHeader';
 import { SessionSubHeader } from '../components/SessionSubHeader';
-import { findSimilarSessions } from '../services/matching';
+import { getMealFingerprint } from '../utils/mealFingerprint';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -296,21 +296,26 @@ export default function MealHistoryScreen() {
   }
 
   function handleCardPress(meal: Meal) {
-    if (!meal.sessionId) {
-      // No session — cannot find similar sessions
-      return;
-    }
-    const targetSession = sessions.find(s => s.id === meal.sessionId) ?? null;
+    // Real sessions use sessionId; legacy pre-session meals get a synthetic session with id 'legacy_<mealId>'
+    const targetSession = meal.sessionId
+      ? sessions.find(s => s.id === meal.sessionId) ?? null
+      : sessions.find(s => s.id === `legacy_${meal.id}`) ?? null;
+
     if (!targetSession) return;
 
-    const result = findSimilarSessions(targetSession, sessions);
-    if (!result || result.matches.length === 0) {
-      // Silent: per CONTEXT.md Decision 6 — no sheet if 0 past instances
-      return;
-    }
+    // Find all other sessions that contain a meal with the same fingerprint,
+    // sorted newest-first. No insulin filter, no same-day exclusion.
+    const targetFp = getMealFingerprint(meal.name);
+    const otherInstances = targetFp
+      ? sessions
+          .filter(s => s.id !== targetSession.id)
+          .filter(s => s.meals.some(m => getMealFingerprint(m.name) === targetFp))
+          .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+          .slice(0, 9)
+      : [];
 
-    // Cap at 10, caller's responsibility per Decision 6
-    setSheetSessions(result.matches.slice(0, 10).map(m => m.session));
+    const list = [targetSession, ...otherInstances];
+    setSheetSessions(list);
     setSheetVisible(true);
   }
 

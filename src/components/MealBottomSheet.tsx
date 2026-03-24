@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { SessionWithMeals } from '../services/storage';
+import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { GlucoseResponse, SessionWithMeals } from '../services/storage';
+import { fetchAndStoreCurveForMeal, loadMeals } from '../services/storage';
 import { classifyOutcome } from '../utils/outcomeClassifier';
 import { glucoseColor } from '../utils/glucoseColor';
 import { formatDate } from '../utils/formatDate';
@@ -58,7 +59,26 @@ export function MealBottomSheet({ sessions, visible, onClose }: MealBottomSheetP
 }
 
 function SessionDetail({ session }: { session: SessionWithMeals }) {
-  const badge = classifyOutcome(session.glucoseResponse);
+  const [glucoseResponse, setGlucoseResponse] = useState<GlucoseResponse | null>(session.glucoseResponse);
+  const [loadingCurve, setLoadingCurve] = useState(false);
+
+  async function handleLoadCurve() {
+    const mealId = session.meals[0]?.id;
+    if (!mealId) return;
+    setLoadingCurve(true);
+    try {
+      await fetchAndStoreCurveForMeal(mealId);
+      const meals = await loadMeals();
+      const updated = meals.find(m => m.id === mealId);
+      if (updated?.glucoseResponse) setGlucoseResponse(updated.glucoseResponse);
+    } catch {
+      // silent failure
+    } finally {
+      setLoadingCurve(false);
+    }
+  }
+
+  const badge = classifyOutcome(glucoseResponse);
   const totalInsulin = session.meals.reduce((sum, m) => sum + m.insulinUnits, 0);
 
   return (
@@ -81,38 +101,47 @@ function SessionDetail({ session }: { session: SessionWithMeals }) {
         <OutcomeBadge badge={badge} size="default" />
       </View>
 
-      {/* Glucose stats + chart — only if response exists */}
-      {session.glucoseResponse && (
+      {/* Glucose stats + chart */}
+      {glucoseResponse ? (
         <>
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>START</Text>
-              <Text style={[styles.statValue, { color: glucoseColor(session.glucoseResponse.startGlucose) }]}>
-                {session.glucoseResponse.startGlucose.toFixed(1)}
+              <Text style={[styles.statValue, { color: glucoseColor(glucoseResponse.startGlucose) }]}>
+                {glucoseResponse.startGlucose.toFixed(1)}
               </Text>
               <Text style={styles.statUnit}>mmol/L</Text>
             </View>
             <View style={styles.stat}>
               <Text style={styles.statLabel}>PEAK</Text>
-              <Text style={[styles.statValue, { color: glucoseColor(session.glucoseResponse.peakGlucose) }]}>
-                {session.glucoseResponse.peakGlucose.toFixed(1)}
+              <Text style={[styles.statValue, { color: glucoseColor(glucoseResponse.peakGlucose) }]}>
+                {glucoseResponse.peakGlucose.toFixed(1)}
               </Text>
               <Text style={styles.statUnit}>mmol/L</Text>
             </View>
             <View style={styles.stat}>
-              <Text style={styles.statLabel}>{session.glucoseResponse.isPartial ? 'NOW' : '3HR'}</Text>
-              <Text style={[styles.statValue, { color: glucoseColor(session.glucoseResponse.endGlucose) }]}>
-                {session.glucoseResponse.endGlucose.toFixed(1)}
+              <Text style={styles.statLabel}>3HR</Text>
+              <Text style={[styles.statValue, { color: glucoseColor(glucoseResponse.endGlucose) }]}>
+                {glucoseResponse.endGlucose.toFixed(1)}
               </Text>
               <Text style={styles.statUnit}>mmol/L</Text>
             </View>
           </View>
 
-          {/* Lazy render: only active tab mounts GlucoseChart (per CONTEXT.md Decision 6) */}
-          {session.glucoseResponse.readings.length >= 2 && (
-            <GlucoseChart response={session.glucoseResponse} height={140} />
+          {glucoseResponse.readings.length >= 2 && (
+            <GlucoseChart response={glucoseResponse} height={140} />
           )}
         </>
+      ) : (
+        <View style={styles.noCurveBox}>
+          <Text style={styles.noCurveText}>Glucose curve not available</Text>
+          <Pressable style={styles.loadCurveBtn} onPress={handleLoadCurve} disabled={loadingCurve}>
+            {loadingCurve
+              ? <ActivityIndicator size="small" color="#0A84FF" />
+              : <Text style={styles.loadCurveBtnText}>Load curve</Text>
+            }
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -218,5 +247,31 @@ const styles = StyleSheet.create({
   statUnit: {
     fontSize: 10,
     color: '#636366',
+  },
+  noCurveBox: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    gap: 10,
+  },
+  noCurveText: {
+    fontSize: 14,
+    color: '#8E8E93',
+  },
+  loadCurveBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: '#0A84FF',
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  loadCurveBtnText: {
+    fontSize: 14,
+    color: '#0A84FF',
+    fontWeight: '600',
   },
 });

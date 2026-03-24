@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { fetchAndStoreCurve, loadSessionsWithMeals, saveMeal } from '../services/storage';
+import type { SessionWithMeals } from '../services/storage';
 import { fetchGlucoseRange, fetchLatestGlucose } from '../services/nightscout';
 import {
   estimateCarbsFromPhoto,
@@ -25,10 +26,12 @@ import {
 } from '../services/carbEstimate';
 import type { SessionMatch, MatchSummary } from '../services/matching';
 import { findSimilarSessions } from '../services/matching';
+import { getMealFingerprint } from '../utils/mealFingerprint';
 import { classifyOutcome } from '../utils/outcomeClassifier';
 import { glucoseColor } from '../utils/glucoseColor';
 import { OutcomeBadge } from '../components/OutcomeBadge';
 import { AveragedStatsPanel } from '../components/AveragedStatsPanel';
+import { MealBottomSheet } from '../components/MealBottomSheet';
 
 function applyLateEntryTime(selectedTime: Date): Date {
   const now = new Date();
@@ -74,7 +77,11 @@ export default function MealLogScreen() {
   // Live matching state (Phase 3)
   const [liveMatches, setLiveMatches] = useState<SessionMatch[]>([]);
   const [matchSummary, setMatchSummary] = useState<MatchSummary | null>(null);
-  const [insulinHint, setInsulinHint] = useState<number | null>(null);
+  const [allMatchedSessions, setAllMatchedSessions] = useState<SessionWithMeals[]>([]);
+
+  // Previous meal sheet state
+  const [sheetSessions, setSheetSessions] = useState<SessionWithMeals[]>([]);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   useEffect(() => {
     getRemainingEstimates().then(n => {
@@ -83,46 +90,54 @@ export default function MealLogScreen() {
     });
   }, []);
 
-  // Debounced live matching — fires 300ms after mealName changes
+  // Debounced live matching — fires 400ms after mealName changes
   useEffect(() => {
-    // Clear stale hint whenever meal name changes
-    setInsulinHint(null);
+    const trimmed = mealName.trim();
 
-    if (mealName.trim().length < 2) {
+    if (trimmed.length < 3) {
       setLiveMatches([]);
       setMatchSummary(null);
+      setAllMatchedSessions([]);
       return;
     }
     const timer = setTimeout(async () => {
       try {
         const allSessions = await loadSessionsWithMeals();
-        const query = mealName.trim().toLowerCase();
-        const matched = allSessions
-          .filter(s =>
-            s.glucoseResponse !== null &&
-            !s.glucoseResponse.isPartial &&
-            (s.meals[0]?.name.toLowerCase().includes(query) ?? false)
-          )
-          .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-          .slice(0, 5)
-          .map(s => ({ session: s, score: 1 as number }));
+        const query = trimmed.toLowerCase();
+        const fp = getMealFingerprint(trimmed);
+
+        // Predictive display: substring match after 3+ chars, newest-first
+        const displayMatches = allSessions
+          .filter(s => s.meals.some(m => m.name.toLowerCase().includes(query)))
+          .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+        setAllMatchedSessions(displayMatches);
+
+        // AveragedStatsPanel: exact fingerprint match, completed curves only
+        const matched = fp
+          ? allSessions
+              .filter(s =>
+                s.glucoseResponse !== null &&
+                !s.glucoseResponse.isPartial &&
+                s.meals.some(m => getMealFingerprint(m.name) === fp)
+              )
+              .slice(0, 5)
+              .map(s => ({ session: s, score: 1 as number }))
+          : [];
         setLiveMatches(matched);
 
-        // Compute averaged stats for AveragedStatsPanel
-        // Use the first matched session as the target to run findSimilarSessions
         if (matched.length >= 2) {
-          const target = matched[0].session;
-          const summary = findSimilarSessions(target, allSessions);
+          const summary = findSimilarSessions(matched[0].session, allSessions);
           setMatchSummary(summary);
         } else {
           setMatchSummary(null);
         }
       } catch {
-        // Silent failure — hide list, do not show error (per 03-UI-SPEC.md error state)
         setLiveMatches([]);
         setMatchSummary(null);
+        setAllMatchedSessions([]);
       }
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
   }, [mealName]);
 
@@ -317,47 +332,48 @@ export default function MealLogScreen() {
         <AveragedStatsPanel summary={matchSummary} />
 
         {/* Live match list — appears below meal name input when matches exist */}
-        {liveMatches.length > 0 && (
+        {allMatchedSessions.length > 0 && (
           <View style={styles.liveMatchContainer}>
-            {liveMatches.map((match, index) => {
-              const sessionInsulin = match.session.meals.reduce(
+            {allMatchedSessions.slice(0, 5).map((session, index) => {
+              const sessionInsulin = session.meals.reduce(
                 (sum, m) => sum + (m.insulinUnits ?? 0), 0
               );
-              const firstName = match.session.meals[0]?.name ?? '';
-              const dateStr = new Date(match.session.startedAt).toLocaleDateString('en-GB', {
+              const firstName = session.meals[0]?.name ?? '';
+              const dateStr = new Date(session.startedAt).toLocaleDateString('en-GB', {
                 weekday: 'short', day: 'numeric', month: 'short',
               });
-              const badge = classifyOutcome(match.session.glucoseResponse);
+              const badge = classifyOutcome(session.glucoseResponse);
+              const gr = session.glucoseResponse;
               const isHypo = badge === 'HYPO';
-              const peakOrLow = isHypo
-                ? Math.min(...match.session.glucoseResponse!.readings.map(r => r.mmol))
-                : match.session.glucoseResponse!.peakGlucose;
-              const peakOrLowLabel = isHypo ? 'low' : 'peak';
-              const rowConfidenceLow = match.session.confidence !== 'high';
+              const peakOrLow = gr
+                ? isHypo
+                  ? Math.min(...gr.readings.map(r => r.mmol))
+                  : gr.peakGlucose
+                : null;
+              const rowConfidenceLow = session.confidence !== 'high';
 
               return (
                 <Pressable
-                  key={match.session.id}
+                  key={session.id}
                   style={[styles.liveMatchRow, index > 0 && styles.liveMatchRowDivider]}
                   onPress={() => {
-                    setMealName(firstName);
-                    setInsulinHint(sessionInsulin);
-                    setLiveMatches([]);
                     Keyboard.dismiss();
+                    setSheetSessions(allMatchedSessions);
+                    setSheetVisible(true);
                   }}
                   hitSlop={8}
                 >
-                  {/* Row primary: name + units + date + peak/low */}
                   <View style={styles.liveMatchRowPrimary}>
                     <Text style={styles.liveMatchRowName} numberOfLines={1}>
                       {firstName} — {sessionInsulin}u
                     </Text>
                     <Text style={styles.liveMatchRowDate}>{dateStr}</Text>
-                    <Text style={[styles.liveMatchRowPeak, { color: glucoseColor(peakOrLow) }]}>
-                      {peakOrLowLabel} {peakOrLow.toFixed(1)} mmol/L
-                    </Text>
+                    {peakOrLow !== null && (
+                      <Text style={[styles.liveMatchRowPeak, { color: glucoseColor(peakOrLow) }]}>
+                        {isHypo ? 'low' : 'peak'} {peakOrLow.toFixed(1)} mmol/L
+                      </Text>
+                    )}
                   </View>
-                  {/* Row secondary: badge + Went well */}
                   <View style={styles.liveMatchBadgeRow}>
                     <OutcomeBadge badge={badge} size="small" />
                     {badge === 'GREEN' && (
@@ -381,9 +397,6 @@ export default function MealLogScreen() {
         {/* Insulin units */}
         <View style={styles.insulinLabelRow}>
           <Text style={styles.label}>Insulin units</Text>
-          {insulinHint !== null && (
-            <Text style={styles.insulinHintText}>({insulinHint}u last time)</Text>
-          )}
         </View>
         <TextInput
           style={styles.input}
@@ -461,6 +474,11 @@ export default function MealLogScreen() {
         </Pressable>
 
       </ScrollView>
+      <MealBottomSheet
+        sessions={sheetSessions}
+        visible={sheetVisible}
+        onClose={() => setSheetVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
