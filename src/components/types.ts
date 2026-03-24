@@ -1,6 +1,7 @@
 // src/components/types.ts
 // Phase 2 component prop contracts.
 // Phase 3 wire-in: MatchingSlotProps.matchData widened to null | MatchSummary.
+// Phase 4: MealHistoryCardProps (renamed from ExpandableCard) and MealBottomSheetProps added.
 
 import type { GlucoseResponse, Meal, SessionWithMeals } from '../services/storage';
 import type { OutcomeBadge } from '../utils/outcomeClassifier';
@@ -39,6 +40,25 @@ export interface ExpandableCardProps {
   onRefresh: () => void;         // called after curve fetch to trigger list reload
   matchingSlot: MatchingSlotProps;
   allSessions: SessionWithMeals[]; // passed from MealHistoryScreen for matching computation
+}
+
+// ---- MealHistoryCard ----
+// Simplified tap-to-open card (renamed from ExpandableCard, no expand/collapse state).
+// Tapping calls onPress — caller is responsible for opening MealBottomSheet.
+// Per Phase 4 CONTEXT.md Decision 7: expand/collapse removed; bottom sheet pattern used instead.
+export interface MealHistoryCardProps {
+  meal: Meal;
+  onPress: () => void;  // caller opens MealBottomSheet
+}
+
+// ---- MealBottomSheet ----
+// Modal sheet showing past session instances for a given meal name.
+// Per Phase 4 CONTEXT.md Decision 6: React Native Modal, tab strip at bottom above SafetyDisclaimer.
+// sessions is already capped to 10 by caller. visible=false when sessions is empty.
+export interface MealBottomSheetProps {
+  sessions: SessionWithMeals[];  // already capped to 10 by caller
+  visible: boolean;
+  onClose: () => void;
 }
 
 // ---- DayGroupHeader ----
