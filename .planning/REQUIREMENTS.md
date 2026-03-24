@@ -30,7 +30,7 @@
   - **Red**: `endGlucose < 3.9` (hypo) OR `endGlucose ≥ 14.0` OR `peakGlucose ≥ 14.0` (extreme high)
   - **Pending**: `isPartial = true` (curve not yet complete — no classification)
   - **None**: no `glucoseResponse` (never fetched)
-- [ ] **HIST-04**: User can edit a previously logged insulin dose to correct a mistake — corrected value persists in storage
+- [x] **HIST-04**: User can edit a previously logged insulin dose to correct a mistake — corrected value persists in storage
 - [x] **HIST-05**: User can tap "Late Entry" when logging a meal or insulin dose, select an earlier time that day, and have the glucose curve fetched from that earlier time rather than the current time
 - [x] **HIST-06**: All legacy meals (pre-session data, no sessionId) are migrated to proper session records on first launch after Phase 2 ships — migration is idempotent, runs once, and is logged
 
@@ -105,7 +105,7 @@
 | HOME-01 | Phase 4 | Complete |
 | HOME-02 | Phase 4 | Complete |
 | HOME-03 | Phase 4 | Complete |
-| HIST-04 | Phase 4 | Pending |
+| HIST-04 | Phase 4 | Complete |
 | PATT-03 | Phase 5 | Pending |
 | PATT-04 | Phase 5 | Pending |
 | MKTG-01 | Phase 6 | Pending |
