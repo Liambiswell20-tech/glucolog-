@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { SessionWithMeals } from '../services/storage';
 import { classifyOutcome } from '../utils/outcomeClassifier';
 import { glucoseColor } from '../utils/glucoseColor';
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '92%',
-    minHeight: 300,
+    minHeight: Dimensions.get('window').height * 0.5,
     paddingBottom: 24,
   },
   handle: {
