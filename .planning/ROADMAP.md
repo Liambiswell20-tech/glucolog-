@@ -9,7 +9,7 @@ Milestone 2 transforms BolusBrain from a data-collection app into an intelligent
 - [x] **Phase 1: Tech Debt and Foundation Fixes** - Eliminate data bugs and fragile error handling that would corrupt new features built on top of them (completed 2026-03-21)
 - [ ] **Phase 2: History Refactor and Core UX Components** - Migrate history screen to session model and build the reusable components all intelligence features depend on
 - [ ] **Phase 3: Intelligence Layer — Matching and Outcome Surfacing** - Wire the existing matching engine into history cards and meal log screen
-- [ ] **Phase 4: HomeScreen Glucose Graph and HbA1c Disclaimer** - Expose full-day glucose graph and surface HbA1c with appropriate disclaimer
+- [ ] **Phase 4: Session Grouping, Pattern Recall & HomeScreen Redesign** - Arc gauge HomeScreen, pattern recall bottom sheet, averaged stats, HbA1c disclaimer
 - [ ] **Phase 5: Data Model Extensions and Editing** - Add AI confidence tracking, long-acting overnight window, and dose editing
 - [ ] **Phase 6: Route to Market** - Complete landing page, email capture, and MHRA regulatory contact
 
@@ -72,15 +72,16 @@ Plans:
 - [x] 03-03-PLAN.md — Wave 3: Add debounced live matching and insulin hint to MealLogScreen
 - [ ] 03-04-PLAN.md — Wave 4: Human verification checkpoint (Tests A–F)
 
-### Phase 4: HomeScreen Glucose Graph and HbA1c Disclaimer
-**Goal**: The HomeScreen exposes full-day glucose context on tap and surfaces the HbA1c estimate with a clear disclaimer — completing the user's ability to see their glucose story at a glance
+### Phase 4: Session Grouping, Pattern Recall & HomeScreen Redesign
+**Goal**: The HomeScreen is redesigned with an arc gauge displaying current glucose, pattern recall is surfaced via a bottom sheet from history cards and averaged stats in meal log, and the HbA1c estimate is shown with an appropriate disclaimer — completing the user's ability to understand their glucose story at a glance
 **Depends on**: Phase 1 (sum fix must be verified before disclaimer draws attention to HbA1c), Phase 2 (GlucoseChart component must exist)
 **Requirements**: HOME-01, HOME-02, HOME-03, HIST-04
 **Success Criteria** (what must be TRUE):
-  1. Tapping the main mmol/L reading on HomeScreen opens a full-day line graph showing the last 24 hours of glucose readings with reference lines at 3.9 and 10.0 mmol/L
-  2. Tapping the estimated HbA1c value shows a modal that reads: "Please be aware HbA1c is usually calculated over 90 days. You should get accurate testing and take guidance from your diabetes team."
-  3. Quick log buttons on HomeScreen are visually centred on screen
-  4. User can tap an insulin log entry to edit the dose — the corrected value is saved and the original is preserved
+  1. HomeScreen displays current glucose as an arc gauge spanning 2.0–20.0 mmol/L across a 270-degree sweep, using JetBrains Mono for the glucose value and a pulsing LIVE indicator — null/loading state renders "– –" in the gauge centre
+  2. Tapping a history card opens a bottom sheet showing up to 10 past matching sessions as tabs — each tab renders a GlucoseChart for that session; the sheet is silent (does not open) if 0 past sessions exist
+  3. The meal log screen shows averaged stats (avgRise, avgPeak, avgTimeToPeak) above live match rows when 2 or more matching past sessions exist
+  4. Tapping the estimated HbA1c value shows a modal that reads: "Please be aware HbA1c is usually calculated over 90 days. You should get accurate testing and take guidance from your diabetes team."
+  5. All AsyncStorage.getItem calls in storage.ts are wrapped in try/catch — corrupt entries log a warning and return safe defaults rather than crashing
 **Plans**: 7 plans
 
 Plans:
@@ -127,7 +128,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 | 1. Tech Debt and Foundation Fixes | 4/4 | Complete   | 2026-03-21 |
 | 2. History Refactor and Core UX Components | 5/6 | In Progress|  |
 | 3. Intelligence Layer — Matching and Outcome Surfacing | 3/4 | In Progress|  |
-| 4. HomeScreen Glucose Graph and HbA1c Disclaimer | 0/7 | Planned | - |
+| 4. Session Grouping, Pattern Recall & HomeScreen Redesign | 0/7 | Planned | - |
 | 5. Data Model Extensions and Editing | 0/TBD | Not started | - |
 | 6. Route to Market | 0/3 | Planned | - |
 
