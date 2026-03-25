@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 
-const ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? '';
+const PROXY_URL = 'https://bolusbrain.app/api/carb-estimate';
 
 const RATE_LIMIT_KEY = 'glucolog_carb_estimate_usage';
 const DAILY_LIMIT = 10;
@@ -48,53 +48,19 @@ export async function estimateCarbsFromPhoto(photoUri: string): Promise<string> 
   // Read the photo as base64
   const base64 = await new File(photoUri).base64();
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(PROXY_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-6',
-      max_tokens: 200,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: base64,
-              },
-            },
-            {
-              type: 'text',
-              text: `Estimate the total carbohydrate content of the food shown in this image. Use UK nutritional standards throughout:
-- Base figures on McCance & Widdowson / CoFID (UK food composition database)
-- Carbohydrate means AVAILABLE carbohydrate only: starch + sugars. Do NOT include fibre.
-- All portion sizes and weights in grams only. Do not use cups, ounces, or US measures.
-- Use UK food references where applicable (e.g. Weetabix, Hovis, Heinz, Warburtons, Lurpak). Prefer UK branded products over US equivalents.
-- Do NOT use USDA figures.
-- Report one combined carbohydrate total only. Do NOT break down into sugars separately — sugars are already included within the carbohydrate figure and must not be listed or added on top.
-
-Give a single number or short range (e.g. "45g" or "40–50g") on the first line, then one sentence explaining your reasoning including the estimated portion weight. If no food is visible, say so briefly.`,
-            },
-          ],
-        },
-      ],
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64, mediaType: 'image/jpeg' }),
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({})) as any;
-    throw new Error(err?.error?.message ?? `API error ${response.status}`);
+    const err = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(err?.error ?? `API error ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  const text = (data.content?.[0]?.text ?? '').trim();
+  const data = await response.json() as { result?: string };
+  const text = (data.result ?? '').trim();
 
   // Only count successful estimates against the limit
   await incrementUsage();
