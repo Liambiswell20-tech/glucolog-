@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-31T17:05:36.169Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-31T17:10:25.971Z"
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 32
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 08 (b2b-data-capture-layer) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Plan: 2 of 8
 | Phase 04 P06 | 7 | 2 tasks | 3 files |
 | Phase 04 P07 | 2 | 2 tasks | 2 files |
 | Phase 08 P01 | 4 | 3 tasks | 3 files |
+| Phase 08 P02 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Key constraints affecting this milestone:
 - [Phase 04]: SafetyDisclaimer tested via re-declared expected constant (not import) — drift in source text fails tests immediately
 - [Phase 04]: MealBottomSheet tested with mirrored pure functions (shouldShowTabStrip, computeSafeActiveTab, computeActiveSession) — avoids @testing-library/react-native dependency
 - [Phase 08]: IIFE require pattern for missing module stubs — avoids top-level import that would crash Jest before any tests run
+- [Phase 08]: Single Date.now() call in changeEquipment guarantees ended_at === started_at on the transition — prevents timeline gaps
+- [Phase 08]: NO_LONG_ACTING sentinel maps to null in getCurrentEquipmentProfile — simplifies downstream UI logic
 
 ### Roadmap Evolution
 
@@ -135,6 +138,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T17:05:36.164Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-31T17:10:25.966Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None
