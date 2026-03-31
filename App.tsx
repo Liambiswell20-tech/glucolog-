@@ -5,8 +5,11 @@ import { useFonts, Outfit_400Regular, Outfit_600SemiBold } from '@expo-google-fo
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useAppForeground } from './src/hooks/useAppForeground';
+import { getDailyTIRHistory, calculateDailyTIR, storeDailyTIR } from './src/utils/timeInRange';
+import { fetchGlucoseRange } from './src/services/nightscout';
 import EquipmentOnboardingScreen from './src/screens/EquipmentOnboardingScreen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
@@ -80,6 +83,58 @@ export default function App() {
     }, 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Foreground handler — TIR calculation + hypo recovery curve fetch (B2B-06, B2B-07)
+  const handleForeground = useCallback(async () => {
+    // TIR calculation — once per calendar day
+    try {
+      const yesterday = new Date();
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const yesterdayStr = yesterday.toISOString().slice(0, 10);
+      const history = await getDailyTIRHistory();
+      if (!history.some(r => r.date === yesterdayStr)) {
+        const startMs = Date.UTC(
+          yesterday.getUTCFullYear(),
+          yesterday.getUTCMonth(),
+          yesterday.getUTCDate()
+        );
+        const endMs = startMs + 24 * 60 * 60 * 1000 - 1;
+        const readings = await fetchGlucoseRange(startMs, endMs);
+        const mmolValues = readings.map(r => r.mmol);
+        const tir = calculateDailyTIR(mmolValues, yesterdayStr);
+        await storeDailyTIR(tir);
+      }
+    } catch (err) {
+      console.warn('[App] TIR foreground calculation failed (non-fatal)', err);
+    }
+
+    // Hypo recovery curve fetch — for treatments where 60min window has elapsed
+    try {
+      const HYPO_TREATMENTS_KEY = 'hypo_treatments';
+      const raw = await AsyncStorage.getItem(HYPO_TREATMENTS_KEY);
+      if (!raw) return;
+      const treatments: Array<{ id: string; logged_at: string; glucose_readings_after?: number[] }> = JSON.parse(raw);
+      const now = Date.now();
+      const pending = treatments.filter(t =>
+        t.glucose_readings_after === undefined &&
+        now - new Date(t.logged_at).getTime() > 60 * 60 * 1000
+      );
+      if (pending.length === 0) return;
+      for (const treatment of pending) {
+        try {
+          const startMs = new Date(treatment.logged_at).getTime();
+          const endMs = startMs + 60 * 60 * 1000;
+          const readings = await fetchGlucoseRange(startMs, endMs);
+          treatment.glucose_readings_after = readings.map(r => r.mmol);
+        } catch {}
+      }
+      await AsyncStorage.setItem(HYPO_TREATMENTS_KEY, JSON.stringify(treatments));
+    } catch (err) {
+      console.warn('[App] hypo recovery fetch failed (non-fatal)', err);
+    }
+  }, []);
+
+  useAppForeground(handleForeground);
 
   // Don't render navigation until fonts are ready (or errored/timed out)
   // and until gate check resolves — prevents flash of wrong initial route

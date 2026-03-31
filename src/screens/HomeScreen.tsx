@@ -16,12 +16,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { fetchLatestGlucose, fetchGlucosesSince, GlucoseReading } from '../services/nightscout';
 import { fetchAndStoreCurve, saveMeal, loadGlucoseStore, updateGlucoseStore, loadCachedHba1c, computeAndCacheHba1c, Hba1cEstimate } from '../services/storage';
 import { glucoseToArcAngle } from '../utils/glucoseToArcAngle';
 import { COLORS, FONTS } from '../theme';
 import type { RootStackParamList } from '../../App';
+import type { HypoTreatment } from '../types/equipment';
+import HypoTreatmentSheet from '../components/HypoTreatmentSheet';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -60,9 +63,12 @@ export default function HomeScreen() {
   // HbA1c disclaimer modal
   const [hba1cModalVisible, setHba1cModalVisible] = useState(false);
 
+  // Hypo treatment sheet
+  const [hypoSheetVisible, setHypoSheetVisible] = useState(false);
+
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
+  const cardAnims = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
 
   // LIVE dot pulse loop
   useEffect(() => {
@@ -156,6 +162,23 @@ export default function HomeScreen() {
       Alert.alert('Save failed', 'Try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleHypoSave(treatment: Omit<HypoTreatment, 'id' | 'logged_at' | 'glucose_readings_after'>) {
+    try {
+      const HYPO_TREATMENTS_KEY = 'hypo_treatments';
+      const raw = await AsyncStorage.getItem(HYPO_TREATMENTS_KEY);
+      const existing = raw ? JSON.parse(raw) : [];
+      const record: HypoTreatment = {
+        id: Date.now().toString(),
+        logged_at: new Date().toISOString(),
+        ...treatment,
+      };
+      await AsyncStorage.setItem(HYPO_TREATMENTS_KEY, JSON.stringify([...existing, record]));
+      setHypoSheetVisible(false);
+    } catch (err) {
+      Alert.alert('Save failed', 'Could not save treatment. Try again.');
     }
   }
 
@@ -265,6 +288,24 @@ export default function HomeScreen() {
               <Text style={styles.statValue}>—</Text>
             )}
             {hba1c && <Text style={styles.tapHint}>Tap for info</Text>}
+          </Pressable>
+        </Animated.View>
+
+        {/* Hypo treatment button — B2B-06 */}
+        <Animated.View
+          style={[
+            styles.hypoButtonRow,
+            {
+              opacity: cardAnims[4],
+              transform: [{ scale: cardAnims[4].interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
+            },
+          ]}
+        >
+          <Pressable
+            style={styles.hypoButton}
+            onPress={() => setHypoSheetVisible(true)}
+          >
+            <Text style={styles.hypoButtonText}>Treating a low?</Text>
           </Pressable>
         </Animated.View>
 
@@ -421,6 +462,14 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Hypo treatment sheet — B2B-06 */}
+      <HypoTreatmentSheet
+        visible={hypoSheetVisible}
+        currentGlucose={reading?.mmol ?? null}
+        onClose={() => setHypoSheetVisible(false)}
+        onSave={handleHypoSave}
+      />
     </>
   );
 }
@@ -551,6 +600,25 @@ const styles = StyleSheet.create({
     color: COLORS.blue,
     marginTop: 2,
     fontFamily: FONTS.regular,
+  },
+
+  // Hypo treatment button — B2B-06
+  hypoButtonRow: {
+    width: '100%',
+    paddingHorizontal: 0,
+    marginBottom: 8,
+  },
+  hypoButton: {
+    borderWidth: 1,
+    borderColor: COLORS.red,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  hypoButtonText: {
+    color: COLORS.red,
+    fontSize: 15,
+    fontFamily: FONTS.semiBold,
   },
 
   // Actions
