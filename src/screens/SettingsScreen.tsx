@@ -5,16 +5,24 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
   Pressable,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadSettings, saveSettings, AppSettings } from '../services/settings';
+import { COLORS, FONTS } from '../theme';
+import type { DataConsent } from '../types/equipment';
 import type { RootStackParamList } from '../../App';
+
+const CURRENT_CONSENT_VERSION = '1.0';
+const DATA_CONSENT_KEY = 'data_consent';
 
 function SectionHeader({ title }: { title: string }) {
   return <Text style={styles.sectionHeader}>{title}</Text>;
@@ -64,10 +72,43 @@ export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [consent, setConsent] = useState<DataConsent>({ consented: false, version: CURRENT_CONSENT_VERSION });
+  const [reConsentModalVisible, setReConsentModalVisible] = useState(false);
+
+  async function loadConsent(): Promise<DataConsent> {
+    try {
+      const raw = await AsyncStorage.getItem(DATA_CONSENT_KEY);
+      if (!raw) return { consented: false, version: CURRENT_CONSENT_VERSION };
+      return JSON.parse(raw) as DataConsent;
+    } catch {
+      return { consented: false, version: CURRENT_CONSENT_VERSION };
+    }
+  }
+
+  async function saveConsent(updated: DataConsent): Promise<void> {
+    await AsyncStorage.setItem(DATA_CONSENT_KEY, JSON.stringify(updated));
+  }
+
+  async function handleConsentToggle(value: boolean) {
+    const updated: DataConsent = value
+      ? { consented: true, consented_at: new Date().toISOString(), version: CURRENT_CONSENT_VERSION }
+      : { consented: false, version: CURRENT_CONSENT_VERSION };
+    setConsent(updated);
+    await saveConsent(updated);
+  }
 
   const load = useCallback(async () => {
     const s = await loadSettings();
     setSettings(s);
+    const loadedConsent = await loadConsent();
+    if (loadedConsent.version !== CURRENT_CONSENT_VERSION) {
+      const reset: DataConsent = { consented: false, version: CURRENT_CONSENT_VERSION };
+      await saveConsent(reset);
+      setConsent(reset);
+      setReConsentModalVisible(true);
+    } else {
+      setConsent(loadedConsent);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -143,6 +184,26 @@ export default function SettingsScreen() {
           <NavRow label="Help & FAQ" onPress={() => navigation.navigate('Help')} />
         </View>
 
+        {/* Data & Research */}
+        <SectionHeader title="Data & Research" />
+        <View style={styles.card}>
+          <View style={styles.consentRow}>
+            <View style={styles.consentLabelGroup}>
+              <Text style={styles.consentLabel}>Help improve T1D research</Text>
+              <Text style={styles.consentHint}>
+                Your anonymised usage data may be used to improve diabetes management tools.
+                Copy subject to legal review.
+              </Text>
+            </View>
+            <Switch
+              value={consent.consented}
+              onValueChange={handleConsentToggle}
+              trackColor={{ false: '#3A3A3C', true: COLORS.green }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
         {/* Save */}
         <Pressable
           style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
@@ -160,6 +221,26 @@ export default function SettingsScreen() {
           Always consult your diabetes care team before adjusting doses.
         </Text>
       </ScrollView>
+
+      <Modal
+        visible={reConsentModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReConsentModalVisible(false)}
+      >
+        <View style={styles.reConsentBackdrop}>
+          <View style={styles.reConsentCard}>
+            <Text style={styles.reConsentTitle}>Research consent updated</Text>
+            <Text style={styles.reConsentBody}>
+              Our data research terms have been updated. Your consent has been reset.
+              You can opt back in below.
+            </Text>
+            <Pressable style={styles.reConsentButton} onPress={() => setReConsentModalVisible(false)}>
+              <Text style={styles.reConsentButtonText}>Got it</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -218,4 +299,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 8,
   },
+  consentRow: { flexDirection: 'row', alignItems: 'center', padding: 16, justifyContent: 'space-between' },
+  consentLabelGroup: { flex: 1, marginRight: 12 },
+  consentLabel: { color: COLORS.text, fontSize: 15, fontFamily: FONTS.regular },
+  consentHint: { color: COLORS.textSecondary, fontSize: 12, marginTop: 4, fontFamily: FONTS.regular },
+  reConsentBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  reConsentCard: { backgroundColor: '#1C1C1E', borderRadius: 16, padding: 24, width: '100%' },
+  reConsentTitle: { color: COLORS.text, fontSize: 17, fontFamily: FONTS.semiBold, marginBottom: 12 },
+  reConsentBody: { color: COLORS.textSecondary, fontSize: 14, fontFamily: FONTS.regular, marginBottom: 20 },
+  reConsentButton: { backgroundColor: COLORS.green, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  reConsentButtonText: { color: '#000', fontFamily: FONTS.semiBold, fontSize: 15 },
 });
