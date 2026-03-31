@@ -12,7 +12,7 @@ Milestone 2 transforms BolusBrain from a data-collection app into an intelligent
 - [x] **Phase 4: Session Grouping, Pattern Recall & HomeScreen Redesign** - Arc gauge HomeScreen, pattern recall bottom sheet, averaged stats, HbA1c disclaimer (completed 2026-03-24)
 - [ ] **Phase 5: Data Model Extensions and Editing** - Add AI confidence tracking, long-acting overnight window, and dose editing
 - [ ] **Phase 6: Route to Market** - Complete landing page, email capture, and MHRA regulatory contact
-- [ ] **Phase 8: B2B Data Capture Layer** - Equipment onboarding gate, equipment changelog, meal stamping, hypo treatment quick log, TIR calculation, and data consent — positioning the dataset for acquisition
+- [x] **Phase 8: B2B Data Capture Layer** - Equipment onboarding gate, equipment changelog, meal stamping, hypo treatment quick log, TIR calculation, and data consent — positioning the dataset for acquisition (completed 2026-03-31)
 
 ## Phase Details
 
@@ -132,7 +132,7 @@ Phases 1 → 2 → 3 → 4 → 5 execute in numeric order.
 | 4. Session Grouping, Pattern Recall & HomeScreen Redesign | 7/7 | Complete   | 2026-03-24 |
 | 5. Data Model Extensions and Editing | 0/TBD | Not started | - |
 | 6. Route to Market | 0/3 | Planned | - |
-| 8. B2B Data Capture Layer | 7/8 | In Progress|  |
+| 8. B2B Data Capture Layer | 8/8 | Complete   | 2026-03-31 |
 
 ### Phase 7: Premium features and monetization strategy
 
@@ -167,4 +167,4 @@ Plans:
 - [x] 08-05-PLAN.md — Wave 3: Meal stamping (Meal interface extension + MealLogScreen stamp + read-only chip)
 - [x] 08-06-PLAN.md — Wave 3: HypoTreatmentSheet + HomeScreen hypo button + useAppForeground hook + App.tsx TIR/recovery foreground handler
 - [x] 08-07-PLAN.md — Wave 3: Data & Research consent toggle in SettingsScreen (versioned, OFF by default)
-- [ ] 08-08-PLAN.md — Wave 4: Full test run + human verification checkpoint (all B2B-01 through B2B-08 acceptance checks)
+- [x] 08-08-PLAN.md — Wave 4: Full test run + human verification checkpoint (all B2B-01 through B2B-08 acceptance checks)
