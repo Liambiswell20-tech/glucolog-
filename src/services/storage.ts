@@ -242,6 +242,10 @@ export interface Meal {
   loggedAt: string;             // ISO
   sessionId: string | null;
   glucoseResponse: GlucoseResponse | null; // kept for backward-compat with pre-session data
+  // PHASE 8 — B2B-05: stamped immutably at save time from getCurrentEquipmentProfile()
+  // Do NOT include insulin_brand or delivery_method in updateMeal() changes — they must never be edited
+  insulin_brand?: string;
+  delivery_method?: string;
 }
 
 export interface SessionWithMeals extends Session {
