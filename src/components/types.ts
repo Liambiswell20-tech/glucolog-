@@ -11,7 +11,7 @@ import type { MatchSummary } from '../services/matching';
 
 // ---- GlucoseChart ----
 // Renders a static 3-hour glucose curve line chart with reference lines at 3.9 and 10.0 mmol/L.
-// Per D-01: uses react-native-gifted-charts. Per D-02: shows reference lines. Per D-03: no tap interaction.
+// Per D-02: shows reference lines. Per D-03: no tap interaction.
 export interface GlucoseChartProps {
   response: GlucoseResponse;  // provides readings[], isPartial
   height?: number;            // defaults to 120

@@ -37,7 +37,6 @@
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-dotenv": "^3.4.11",
-    "react-native-gifted-charts": "^1.4.76",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.4.0",
     "react-native-svg": "^15.12.1",
