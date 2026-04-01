@@ -1,7 +1,7 @@
 // src/components/types.ts
 // Phase 2 component prop contracts.
 // Phase 3 wire-in: MatchingSlotProps.matchData widened to null | MatchSummary.
-// Phase 4: MealHistoryCardProps (renamed from ExpandableCard) and MealBottomSheetProps added.
+// Phase 4: MealHistoryCardProps and MealBottomSheetProps added.
 // Phase 8: HypoTreatmentSheetProps added (B2B-06).
 
 import type { GlucoseResponse, Meal, SessionWithMeals } from '../services/storage';
@@ -33,20 +33,8 @@ export interface MatchingSlotProps {
   matchData: null | MatchSummary;
 }
 
-// ---- ExpandableCard ----
-// A meal card that can be tapped to expand/collapse.
-// Expanded state shows: stats row (start/peak/end mmol/L) + GlucoseChart + MatchingSlot.
-// Per D-04: uses LayoutAnimation.easeInEaseOut. Per D-05: shows stats row + chart.
-// Phase 3: matching slot computes real match data on first expand via allSessions.
-export interface ExpandableCardProps {
-  meal: Meal;
-  onRefresh: () => void;         // called after curve fetch to trigger list reload
-  matchingSlot: MatchingSlotProps;
-  allSessions: SessionWithMeals[]; // passed from MealHistoryScreen for matching computation
-}
-
 // ---- MealHistoryCard ----
-// Simplified tap-to-open card (renamed from ExpandableCard, no expand/collapse state).
+// Simplified tap-to-open card.
 // Tapping calls onPress — caller is responsible for opening MealBottomSheet.
 // Per Phase 4 CONTEXT.md Decision 7: expand/collapse removed; bottom sheet pattern used instead.
 export interface MealHistoryCardProps {
