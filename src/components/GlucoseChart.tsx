@@ -1,9 +1,8 @@
 import React from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { G, Line, Text as SvgText } from 'react-native-svg';
 import type { GlucoseChartProps } from './types';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_PADDING = 32; // 16px each side, matches card interior
 const Y_AXIS_WIDTH = 36;
 const PADDING_TOP = 8;
@@ -27,8 +26,9 @@ function formatHour(epochMs: number): string {
 }
 
 export function GlucoseChart({ response, height = 120, showTimeLabels = false }: GlucoseChartProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const bottomPad = showTimeLabels ? PADDING_BOTTOM_WITH_TIME : PADDING_BOTTOM;
-  const drawWidth = SCREEN_WIDTH - CHART_PADDING - Y_AXIS_WIDTH - PADDING_RIGHT;
+  const drawWidth = screenWidth - CHART_PADDING - Y_AXIS_WIDTH - PADDING_RIGHT;
   const drawHeight = height - PADDING_TOP - bottomPad;
   const totalSvgWidth = Y_AXIS_WIDTH + drawWidth + PADDING_RIGHT;
 
