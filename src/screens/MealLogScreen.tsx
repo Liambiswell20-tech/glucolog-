@@ -33,28 +33,8 @@ import { glucoseColor } from '../utils/glucoseColor';
 import { OutcomeBadge } from '../components/OutcomeBadge';
 import { AveragedStatsPanel } from '../components/AveragedStatsPanel';
 import { MealBottomSheet } from '../components/MealBottomSheet';
-
-function applyLateEntryTime(selectedTime: Date): Date {
-  const now = new Date();
-  const candidate = new Date(now);
-  candidate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
-  // If the resulting time is in the future, use yesterday at the same time
-  if (candidate > now) {
-    candidate.setDate(candidate.getDate() - 1);
-  }
-  return candidate;
-}
-
-function parseCarbsGrams(estimate: string | null): number | null {
-  if (!estimate) return null;
-  // Range like "40–50g" or "40-50g" → midpoint
-  const rangeMatch = estimate.match(/(\d+)[–\-](\d+)\s*g/);
-  if (rangeMatch) return Math.round((parseInt(rangeMatch[1], 10) + parseInt(rangeMatch[2], 10)) / 2);
-  // Single value like "45g"
-  const singleMatch = estimate.match(/(\d+)\s*g/);
-  if (singleMatch) return parseInt(singleMatch[1], 10);
-  return null;
-}
+import { applyLateEntryTime } from '../utils/lateEntry';
+import { parseCarbsGrams } from '../utils/parseCarbsGrams';
 
 const DISCLAIMER =
   'Carb estimate only — always calculate your dose using your personal carb:insulin ratio. Do not administer insulin based on this figure alone. Estimates are based on UK nutritional standards (available carbohydrate, excluding fibre). Always refer to product packaging if available.';
