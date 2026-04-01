@@ -41,7 +41,7 @@ export class RateLimitError extends Error {
   }
 }
 
-export async function estimateCarbsFromPhoto(photoUri: string): Promise<string> {
+export async function estimateCarbsFromPhoto(photoUri: string, signal?: AbortSignal): Promise<string> {
   const remaining = await getRemainingEstimates();
   if (remaining <= 0) throw new RateLimitError();
 
@@ -52,6 +52,7 @@ export async function estimateCarbsFromPhoto(photoUri: string): Promise<string> 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ image: base64, mediaType: 'image/jpeg' }),
+    signal,
   });
 
   if (!response.ok) {

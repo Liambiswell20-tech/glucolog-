@@ -48,9 +48,9 @@ export function trendArrow(direction: TrendDirection): string {
   return TREND_ARROWS[direction] ?? '?';
 }
 
-export async function fetchLatestGlucose(): Promise<GlucoseReading> {
+export async function fetchLatestGlucose(signal?: AbortSignal): Promise<GlucoseReading> {
   const url = `${NIGHTSCOUT_URL}?count=1&token=${TOKEN}`;
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
 
   if (!response.ok) throw new Error(`Nightscout error: ${response.status}`);
 
@@ -69,9 +69,9 @@ export async function fetchLatestGlucose(): Promise<GlucoseReading> {
 // Fetch all entries since a given timestamp, sorted oldest-first.
 // Used for the rolling glucose store — on first load pass 30d ago, on subsequent loads pass lastFetchedAt.
 // count=9000 is a ceiling that only matters on first load (30d = ~8,640 readings).
-export async function fetchGlucosesSince(fromMs: number): Promise<GlucoseEntry[]> {
+export async function fetchGlucosesSince(fromMs: number, signal?: AbortSignal): Promise<GlucoseEntry[]> {
   const url = `${NIGHTSCOUT_URL}?count=9000&token=${TOKEN}&find[date][$gte]=${fromMs}`;
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     console.warn(`[nightscout] fetchGlucosesSince: non-OK response ${response.status} — returning []`);
     return [];
@@ -82,12 +82,12 @@ export async function fetchGlucosesSince(fromMs: number): Promise<GlucoseEntry[]
 }
 
 // Fetch all readings between two epoch-ms timestamps (up to 100 readings = ~8hrs)
-export async function fetchGlucoseRange(fromMs: number, toMs: number, count = 100): Promise<CurvePoint[]> {
+export async function fetchGlucoseRange(fromMs: number, toMs: number, count = 100, signal?: AbortSignal): Promise<CurvePoint[]> {
   const url =
     `${NIGHTSCOUT_URL}?count=${count}&token=${TOKEN}` +
     `&find[date][$gte]=${fromMs}&find[date][$lte]=${toMs}`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Nightscout error: ${response.status}`);
 
   const entries: GlucoseEntry[] = await response.json();
