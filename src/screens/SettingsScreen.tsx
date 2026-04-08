@@ -18,10 +18,11 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadSettings, saveSettings, AppSettings } from '../services/settings';
+import { loadTabletDosing, saveTabletDosing } from '../services/storage';
 import { getCurrentEquipmentProfile, changeEquipment } from '../utils/equipmentProfile';
 import EquipmentChangeConfirmation from '../components/EquipmentChangeConfirmation';
 import { COLORS, FONTS } from '../theme';
-import type { DataConsent } from '../types/equipment';
+import type { DataConsent, TabletDosing } from '../types/equipment';
 import type { RootStackParamList } from '../../App';
 
 const CURRENT_CONSENT_VERSION = '1.0';
@@ -94,6 +95,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tablets, setTablets] = useState<TabletDosing[]>([]);
   const [consent, setConsent] = useState<DataConsent>({ consented: false, version: CURRENT_CONSENT_VERSION });
   const [reConsentModalVisible, setReConsentModalVisible] = useState(false);
 
@@ -165,6 +167,8 @@ export default function SettingsScreen() {
       setConsent(loadedConsent);
     }
     await loadEquipment();
+    const loadedTablets = await loadTabletDosing();
+    setTablets(loadedTablets);
   }, [loadEquipment]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -186,6 +190,32 @@ export default function SettingsScreen() {
 
   function update(key: keyof AppSettings, value: string | number | null) {
     setSettings(prev => prev ? { ...prev, [key]: value } : prev);
+  }
+
+  // ─── Tablet dosing handlers ─────────────────────────────────────────────────
+
+  function handleAddTablet() {
+    const newTablet: TabletDosing = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+      name: '',
+      mg: '',
+      amount_per_day: '',
+    };
+    const updated = [...tablets, newTablet];
+    setTablets(updated);
+    saveTabletDosing(updated).catch(() => {});
+  }
+
+  function handleUpdateTablet(id: string, changes: Partial<TabletDosing>) {
+    const updated = tablets.map(t => t.id === id ? { ...t, ...changes } : t);
+    setTablets(updated);
+    saveTabletDosing(updated).catch(() => {});
+  }
+
+  function handleDeleteTablet(id: string) {
+    const updated = tablets.filter(t => t.id !== id);
+    setTablets(updated);
+    saveTabletDosing(updated).catch(() => {});
   }
 
   // ─── Equipment picker handlers ───────────────────────────────────────────────
@@ -261,8 +291,9 @@ export default function SettingsScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: COLORS.background }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
           {/* My Equipment */}
           <SectionHeader title="My Equipment" />
@@ -310,19 +341,44 @@ export default function SettingsScreen() {
               hint="1 unit of insulin covers this many grams of carbs. Used for reference — not medical advice."
             />
             <View style={styles.divider} />
-            <SettingRow
-              label="Tablet name"
-              value={settings.tabletName}
-              onChangeText={v => update('tabletName', v)}
-              placeholder="e.g. Metformin"
-            />
+            <Text style={[styles.settingLabel, { paddingHorizontal: 16, paddingTop: 12 }]}>Tablets</Text>
+            {tablets.map((tablet) => (
+              <View key={tablet.id}>
+                <View style={styles.divider} />
+                <View style={styles.tabletRow}>
+                  <TextInput
+                    style={[styles.tabletInput, { flex: 2 }]}
+                    value={tablet.name}
+                    onChangeText={v => handleUpdateTablet(tablet.id, { name: v })}
+                    placeholder="Tablet name"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <TextInput
+                    style={[styles.tabletInput, { flex: 1 }]}
+                    value={tablet.mg}
+                    onChangeText={v => handleUpdateTablet(tablet.id, { mg: v })}
+                    placeholder="mg"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                  <TextInput
+                    style={[styles.tabletInput, { flex: 1 }]}
+                    value={tablet.amount_per_day}
+                    onChangeText={v => handleUpdateTablet(tablet.id, { amount_per_day: v })}
+                    placeholder="x/day"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                  <Pressable onPress={() => handleDeleteTablet(tablet.id)} hitSlop={8}>
+                    <Text style={{ color: COLORS.red, fontSize: 18, fontFamily: FONTS.semiBold }}>X</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
             <View style={styles.divider} />
-            <SettingRow
-              label="Tablet dose"
-              value={settings.tabletDose}
-              onChangeText={v => update('tabletDose', v)}
-              placeholder="e.g. 500mg twice daily"
-            />
+            <Pressable style={styles.addTabletBtn} onPress={handleAddTablet}>
+              <Text style={styles.addTabletBtnText}>+ Add tablet</Text>
+            </Pressable>
           </View>
 
           {/* Account */}
@@ -543,5 +599,28 @@ const styles = StyleSheet.create({
   pickerOptionText: {
     fontSize: 17,
     color: '#FFFFFF',
+  },
+  tabletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+  },
+  tabletInput: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+    padding: 10,
+    fontFamily: FONTS.regular,
+  },
+  addTabletBtn: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  addTabletBtnText: {
+    color: COLORS.green,
+    fontSize: 15,
+    fontFamily: FONTS.semiBold,
   },
 });

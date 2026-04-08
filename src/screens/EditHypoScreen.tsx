@@ -16,6 +16,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { loadHypoTreatments, updateHypoTreatment, deleteHypoTreatment } from '../services/storage';
 import type { HypoTreatment } from '../types/equipment';
 import type { RootStackParamList } from '../../App';
+import { COLORS } from '../theme';
 
 const TREATMENT_TYPES = ['Glucose tablets', 'Juice', 'Sweets', 'Gel', 'Other'] as const;
 const AMOUNT_UNITS: Array<HypoTreatment['amount_unit']> = ['tablets', 'ml', 'g', 'food'];
@@ -108,7 +109,7 @@ export default function EditHypoScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#000' }}
+      style={{ flex: 1, backgroundColor: COLORS.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -224,7 +225,7 @@ export default function EditHypoScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
   container: { padding: 24, paddingBottom: 48 },
 
   label: {

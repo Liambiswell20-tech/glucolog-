@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { loadSettings, saveSettings } from '../services/settings';
+import { COLORS } from '../theme';
 
 export default function AccountScreen() {
   const [name, setName] = useState('');
@@ -40,7 +41,7 @@ export default function AccountScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#000' }}
+      style={{ flex: 1, backgroundColor: COLORS.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container}>

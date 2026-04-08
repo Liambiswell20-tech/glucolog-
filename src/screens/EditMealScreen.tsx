@@ -17,6 +17,7 @@ import {
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { loadMeals, updateMeal, deleteMeal, fetchAndStoreCurveForMeal } from '../services/storage';
 import type { RootStackParamList } from '../../App';
+import { COLORS } from '../theme';
 
 export default function EditMealScreen() {
   const navigation = useNavigation();
@@ -138,7 +139,7 @@ export default function EditMealScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#000' }}
+      style={{ flex: 1, backgroundColor: COLORS.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -246,7 +247,7 @@ export default function EditMealScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
   container: { padding: 24, paddingBottom: 48 },
 
   photoArea: {

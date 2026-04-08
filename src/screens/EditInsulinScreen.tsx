@@ -15,6 +15,7 @@ import {
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { loadInsulinLogs, updateInsulinLog, deleteInsulinLog, InsulinLogType } from '../services/storage';
 import type { RootStackParamList } from '../../App';
+import { COLORS } from '../theme';
 
 const TYPE_CONFIG: Record<InsulinLogType, { label: string; color: string; emoji: string }> = {
   'long-acting': { label: 'Long-acting insulin', color: '#FF3B30', emoji: '❤️' },
@@ -105,7 +106,7 @@ export default function EditInsulinScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#000' }}
+      style={{ flex: 1, backgroundColor: COLORS.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -187,7 +188,7 @@ export default function EditInsulinScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
   container: { padding: 24, paddingBottom: 48, gap: 0 },
 
   typeRow: {
