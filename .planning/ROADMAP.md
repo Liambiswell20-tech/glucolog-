@@ -178,7 +178,7 @@ Plans:
 **Plans**: 7 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Types, storage helpers, dark theme, onboarding gate infrastructure, background standardisation
+- [x] 09-01-PLAN.md — Types, storage helpers, dark theme, onboarding gate infrastructure, background standardisation
 - [ ] 09-02-PLAN.md — DataSharingOnboardingScreen + AboutMeOnboardingScreen + App.tsx wiring
 - [ ] 09-03-PLAN.md — Hypo treatment rework (free text, optional brand/amount) + Help FAQ copy update
 - [ ] 09-04-PLAN.md — Multi-tablet dosing in SettingsScreen
