@@ -1,7 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurvePoint, fetchGlucoseRange } from './nightscout';
 
-import type { HypoTreatment } from '../types/equipment';
+import type { HypoTreatment, UserProfile, TabletDosing } from '../types/equipment';
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 const MEALS_KEY = 'glucolog_meals';
 const SESSIONS_KEY = 'glucolog_sessions';
@@ -10,6 +14,8 @@ const MIGRATION_V1_KEY = 'glucolog_migration_v1';
 const HBA1C_CACHE_KEY = 'glucolog_hba1c_cache';
 const GLUCOSE_STORE_KEY = 'glucolog_glucose_store';
 const HYPO_TREATMENTS_KEY = 'hypo_treatments';
+const USER_PROFILE_KEY = 'user_profile';
+const TABLET_DOSING_KEY = 'tablet_dosing';
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -49,7 +55,7 @@ export async function saveInsulinLog(
   const existing = await loadInsulinLogs();
   const now = loggedAt ?? new Date();
   const log: InsulinLog = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     type,
     units,
     startGlucose,
@@ -339,7 +345,7 @@ export async function saveMeal(
 
   const newMeal: Meal = {
     ...meal,
-    id: crypto.randomUUID(),
+    id: generateId(),
     loggedAt: now.toISOString(),
     glucoseResponse: null,
     sessionId: null,
@@ -581,6 +587,61 @@ export async function fetchAndStoreHypoRecoveryCurve(treatmentId: string): Promi
     t.id === treatmentId ? { ...t, glucose_readings_after: mmolValues } : t
   );
   await AsyncStorage.setItem(HYPO_TREATMENTS_KEY, JSON.stringify(updated));
+}
+
+// --- user profile ---
+
+export async function loadUserProfile(): Promise<UserProfile | null> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_PROFILE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as UserProfile;
+  } catch {
+    console.warn('[storage] loadUserProfile: getItem/parse failed', USER_PROFILE_KEY);
+    return null;
+  }
+}
+
+export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+}
+
+// --- tablet dosing ---
+
+export async function loadTabletDosing(): Promise<TabletDosing[]> {
+  try {
+    const raw = await AsyncStorage.getItem(TABLET_DOSING_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as TabletDosing[];
+  } catch {
+    console.warn('[storage] loadTabletDosing: getItem/parse failed', TABLET_DOSING_KEY);
+    return [];
+  }
+}
+
+export async function saveTabletDosing(tablets: TabletDosing[]): Promise<void> {
+  await AsyncStorage.setItem(TABLET_DOSING_KEY, JSON.stringify(tablets));
+}
+
+export async function migrateTabletDosing(): Promise<void> {
+  const existing = await loadTabletDosing();
+  if (existing.length > 0) return; // already migrated or user has added tablets
+  try {
+    const raw = await AsyncStorage.getItem('glucolog_settings');
+    if (!raw) return;
+    const settings = JSON.parse(raw) as { tabletName?: string; tabletDose?: string };
+    if (settings.tabletName && settings.tabletName.trim()) {
+      const migrated: TabletDosing = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+        name: settings.tabletName.trim(),
+        mg: settings.tabletDose?.replace(/[^0-9.]/g, '') || '',
+        amount_per_day: '1',
+      };
+      await saveTabletDosing([migrated]);
+    }
+  } catch {
+    console.warn('[storage] migrateTabletDosing: migration failed (non-fatal)');
+  }
 }
 
 // One-time idempotent migration: creates proper Session records for meals that pre-date
