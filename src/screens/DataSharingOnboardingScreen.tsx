@@ -60,8 +60,8 @@ export default function DataSharingOnboardingScreen() {
         {/* Body text */}
         <Text style={styles.body}>
           BolusBrain can share your fully anonymised usage data to help improve
-          diabetes management tools and contribute to T1D research. Your data
-          will never be sold. No personal information is shared.
+          diabetes management tools and contribute to T1D research. No personal
+          information is shared.
         </Text>
 
         {/* Bullet points */}

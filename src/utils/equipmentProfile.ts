@@ -70,7 +70,7 @@ export async function changeEquipment(field: string, newValue: string, reason?: 
     previousActive.ended_at = now;
   }
   const newEntry: EquipmentChangeEntry = {
-    id: crypto.randomUUID(),
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
     field: field as EquipmentChangeEntry['field'],
     value: newValue,
     started_at: now,

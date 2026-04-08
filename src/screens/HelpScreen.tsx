@@ -24,7 +24,7 @@ const FAQ = [
   },
   {
     q: 'Is my data private?',
-    a: 'Yes. All meal and insulin data is stored locally on your device. Glucose data is fetched directly from your personal Nightscout instance. If you opt in to data sharing in Settings, your data is fully anonymised and used to help improve diabetes care and T1D research. No personal information is ever shared. You can opt out at any time.',
+    a: 'Yes. Your data is protected and encrypted. Glucose data is fetched directly from your personal Nightscout instance. If you opt in to data sharing in Settings, your data is fully anonymised and used to help improve diabetes care and T1D research. No personal information is ever shared. You can opt out at any time.',
   },
 ];
 

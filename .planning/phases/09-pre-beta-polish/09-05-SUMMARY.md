@@ -63,7 +63,7 @@ Each task was committed atomically:
 
 1. **Task 1: Add custom tab bar and long-acting insulin tab to MealHistoryScreen** - `ef31975` (feat)
 
-**Plan metadata:** [pending] (docs: complete plan)
+**Plan metadata:** `8329ac3` (docs: complete plan)
 
 ## Files Created/Modified
 - `src/screens/MealHistoryScreen.tsx` - Added HistoryTabBar, LongActingCard, LongActingTab sub-components; wrapped existing FlatList in tab-conditional views with activeTab state

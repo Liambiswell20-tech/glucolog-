@@ -23,6 +23,7 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.
 ---
 
 ## Absolute Rules
+- **NEVER suggest, recommend, or perform any action that could cause data loss** — no clearing app data, no deleting AsyncStorage, no factory resets, no destructive migrations. Liam's logged data is irreplaceable.
 - Always display glucose in **mmol/L** — never mg/dL
 - **Never give insulin dosing advice** — show historical patterns only
 - Frame everything as "last time you ate this..." not "you should take X units"

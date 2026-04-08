@@ -109,6 +109,15 @@ export default function HypoTreatmentSheet({
                   onPress={() => {
                     setCustomType('');
                     setTreatmentType(type);
+                    // Auto-set sensible default unit for each treatment type
+                    const unitMap: Record<string, 'tablets' | 'ml' | 'g' | 'food'> = {
+                      'Glucose tablets': 'tablets',
+                      'Juice': 'ml',
+                      'Sweets': 'food',
+                      'Gel': 'food',
+                      'Other': 'food',
+                    };
+                    setAmountUnit(unitMap[type] ?? 'food');
                   }}
                 >
                   <Text style={[styles.chipText, treatmentType === type && !customType.trim() && styles.chipTextActive]}>
