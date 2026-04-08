@@ -10,6 +10,8 @@ import { View } from 'react-native';
 import { useAppForeground } from './src/hooks/useAppForeground';
 import { getDailyTIRHistory, calculateDailyTIR, storeDailyTIR } from './src/utils/timeInRange';
 import { fetchGlucoseRange } from './src/services/nightscout';
+import DataSharingOnboardingScreen from './src/screens/DataSharingOnboardingScreen';
+import AboutMeOnboardingScreen from './src/screens/AboutMeOnboardingScreen';
 import EquipmentOnboardingScreen from './src/screens/EquipmentOnboardingScreen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
@@ -57,14 +59,6 @@ const BolusBrainDarkTheme = {
   },
   fonts: DefaultTheme.fonts,
 };
-
-// Temporary placeholders — replaced by Plan 09-02
-function DataSharingOnboardingPlaceholder() {
-  return <View style={{ flex: 1, backgroundColor: COLORS.background }} />;
-}
-function AboutMeOnboardingPlaceholder() {
-  return <View style={{ flex: 1, backgroundColor: COLORS.background }} />;
-}
 
 // Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -207,12 +201,12 @@ export default function App() {
         >
           <Stack.Screen
             name="DataSharingOnboarding"
-            component={DataSharingOnboardingPlaceholder}
+            component={DataSharingOnboardingScreen}
             options={{ headerShown: false, gestureEnabled: false }}
           />
           <Stack.Screen
             name="AboutMeOnboarding"
-            component={AboutMeOnboardingPlaceholder}
+            component={AboutMeOnboardingScreen}
             options={{ headerShown: false, gestureEnabled: false }}
           />
           <Stack.Screen
