@@ -35,6 +35,7 @@ import { AveragedStatsPanel } from '../components/AveragedStatsPanel';
 import { MealBottomSheet } from '../components/MealBottomSheet';
 import { applyLateEntryTime } from '../utils/lateEntry';
 import { parseCarbsGrams } from '../utils/parseCarbsGrams';
+import { COLORS } from '../theme';
 
 const DISCLAIMER =
   'Carb estimate only — always calculate your dose using your personal carb:insulin ratio. Do not administer insulin based on this figure alone. Estimates are based on UK nutritional standards (available carbohydrate, excluding fibre). Always refer to product packaging if available.';
@@ -256,8 +257,9 @@ export default function MealLogScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#000' }}
+      style={{ flex: 1, backgroundColor: COLORS.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 

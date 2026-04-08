@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +17,7 @@ import { saveInsulinLog, fetchAndStoreBasalCurve, InsulinLogType } from '../serv
 import { loadSettings } from '../services/settings';
 import { fetchLatestGlucose } from '../services/nightscout';
 import type { RootStackParamList } from '../../App';
+import { COLORS } from '../theme';
 
 function applyLateEntryTime(selectedTime: Date): Date {
   const now = new Date();
@@ -109,8 +111,9 @@ export default function InsulinLogScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
-      <View style={styles.inner}>
+      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <Text style={styles.emoji}>{cfg.emoji}</Text>
         <Text style={[styles.title, { color: cfg.color }]}>{cfg.title}</Text>
         <Text style={styles.subtitle}>{cfg.subtitle}</Text>
@@ -207,7 +210,7 @@ export default function InsulinLogScreen() {
             </Text>
           </>
         )}
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -215,10 +218,10 @@ export default function InsulinLogScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background,
   },
   inner: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
