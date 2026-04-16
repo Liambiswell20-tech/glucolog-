@@ -80,10 +80,10 @@
 - [x] **SUPA-02**: All health data (glucose, meals, insulin, HbA1c) stored in Supabase PostgreSQL with row-level security -- each user sees only their own data. 9 tables with RLS enabled and policies using `auth.uid() = user_id`. Primary keys use `gen_random_uuid()` (never `crypto.randomUUID`).
 - [x] **SUPA-03**: Health data encrypted at rest (GDPR Article 9 special category data compliance) via Supabase default AES-256 encryption. Session tokens encrypted client-side via LargeSecureStore (AES-CTR with keys in expo-secure-store).
 - [x] **SUPA-04**: Server-side rate limiting on `/api/carb-estimate` proxy (JWT-based, 10 req/day/user) -- client-side bypass eliminated. Rate tracked in `ai_carb_requests` table with reservation pattern (INSERT before API call). HTTP 429 returned with Retry-After header when exceeded.
-- [ ] **SUPA-05**: AI consent modal shown before first carb estimate: "Your photo is sent to Anthropic's Claude API for carb estimation and is not stored by them" -- one-tap accept, persisted in `ai_consent_records` table with version 1.0. Revokable in Settings Data & Research section. MealLogScreen catches ConsentRequiredError and shows modal with retry.
+- [x] **SUPA-05**: AI consent modal shown before first carb estimate: "Your photo is sent to Anthropic's Claude API for carb estimation and is not stored by them" -- one-tap accept, persisted in `ai_consent_records` table with version 1.0. Revokable in Settings Data & Research section. MealLogScreen catches ConsentRequiredError and shows modal with retry.
 - [x] **SUPA-06**: Existing AsyncStorage data migrated to Supabase via manual "Migrate my data" button in Settings -- migration is idempotent (UNIQUE constraints + upsert), chunked at 50 rows, preserves all historical meals, insulin logs, equipment profiles, hypo treatments, TIR, and consent records. AsyncStorage NEVER wiped. Pre-migration refactor consolidates all direct AsyncStorage calls into storage.ts.
 - [ ] **SUPA-07**: Data sharing toggle enforced server-side -- when user turns off, their data is excluded from any aggregation queries. Enforcement helper function `dataSharingFilter()` exported for use by any future aggregation query.
-- [ ] **SUPA-08**: HelpScreen copy updated to accurately reflect that photos pass through Anthropic's servers for carb estimation -- FAQ answer includes "sent to Anthropic's Claude API for processing and is not stored by them" with consent requirement mentioned.
+- [x] **SUPA-08**: HelpScreen copy updated to accurately reflect that photos pass through Anthropic's servers for carb estimation -- FAQ answer includes "sent to Anthropic's Claude API for processing and is not stored by them" with consent requirement mentioned.
 
 ## v2 Requirements
 
@@ -161,10 +161,10 @@
 | SUPA-02 | Phase 11 | Complete |
 | SUPA-03 | Phase 11 | Complete |
 | SUPA-04 | Phase 11 | Complete |
-| SUPA-05 | Phase 11 | Pending |
+| SUPA-05 | Phase 11 | Complete |
 | SUPA-06 | Phase 11 | Complete |
 | SUPA-07 | Phase 11 | Pending |
-| SUPA-08 | Phase 11 | Pending |
+| SUPA-08 | Phase 11 | Complete |
 
 **Coverage:**
 - v1 requirements: 34 total
