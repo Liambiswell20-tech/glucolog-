@@ -13,6 +13,9 @@ import { fetchGlucoseRange } from './src/services/nightscout';
 import DataSharingOnboardingScreen from './src/screens/DataSharingOnboardingScreen';
 import AboutMeOnboardingScreen from './src/screens/AboutMeOnboardingScreen';
 import EquipmentOnboardingScreen from './src/screens/EquipmentOnboardingScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import SignUpScreen from './src/screens/SignUpScreen';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { PortalHost } from '@rn-primitives/portal';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
@@ -30,6 +33,8 @@ import type { InsulinLogType } from './src/services/storage';
 import { migrateLegacySessions, migrateTabletDosing, loadOnboardingFlag, loadEquipmentChangelog, loadHypoTreatments, fetchAndStoreHypoRecoveryCurve } from './src/services/storage';
 
 export type RootStackParamList = {
+  Login: undefined;
+  SignUp: undefined;
   DataSharingOnboarding: undefined;
   AboutMeOnboarding: undefined;
   EquipmentOnboarding: undefined;
@@ -64,7 +69,9 @@ const BolusBrainDarkTheme = {
 // Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export default function App() {
+function AppNavigator() {
+  const { session, loading: authLoading } = useAuth();
+
   const [fontsLoaded, fontError] = useFonts({
     Outfit_400Regular,
     Outfit_600SemiBold,
@@ -83,7 +90,7 @@ export default function App() {
     );
   }, []);
 
-  // Multi-step onboarding gate: data sharing → about me → equipment
+  // Multi-step onboarding gate: data sharing -> about me -> equipment
   useEffect(() => {
     async function checkOnboarding() {
       try {
@@ -169,64 +176,90 @@ export default function App() {
 
   useAppForeground(handleForeground);
 
-  // Don't render navigation until fonts are ready (or errored/timed out)
-  // and until gate check resolves — prevents flash of wrong initial route
-  // fontError: render anyway (fonts will fall back to system)
-  if ((!fontsLoaded && !fontError) || !gateChecked) {
+  // Don't render navigation until fonts are ready (or errored/timed out),
+  // auth state is loaded, and gate check resolves — prevents flash of wrong screen
+  if (authLoading || (!fontsLoaded && !fontError) || !gateChecked) {
     return <View style={{ flex: 1, backgroundColor: '#050706' }} />;
   }
 
   return (
-    <SafeAreaProvider>
-      <NavigationContainer theme={BolusBrainDarkTheme}>
-        <StatusBar style="light" />
-        <Stack.Navigator
-          initialRouteName={initialRoute}
-          screenOptions={{
-            headerStyle: { backgroundColor: '#050706' },
-            headerTintColor: '#fff',
-            headerTitleStyle: { fontWeight: '600' },
-            contentStyle: { backgroundColor: '#050706' },
-          }}
-        >
-          <Stack.Screen
-            name="DataSharingOnboarding"
-            component={DataSharingOnboardingScreen}
-            options={{ headerShown: false, gestureEnabled: false }}
-          />
-          <Stack.Screen
-            name="AboutMeOnboarding"
-            component={AboutMeOnboardingScreen}
-            options={{ headerShown: false, gestureEnabled: false }}
-          />
-          <Stack.Screen
-            name="EquipmentOnboarding"
-            component={EquipmentOnboardingScreen}
-            options={{ headerShown: false, gestureEnabled: false }}
-          />
-          <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="MealLog" component={MealLogScreen} options={{ title: 'Log meal' }} />
-          <Stack.Screen name="MealHistory" component={MealHistoryScreen} options={{ title: 'History' }} />
-          <Stack.Screen
-            name="InsulinLog"
-            component={InsulinLogScreen}
-            options={({ route }) => ({
-              title: route.params.type === 'long-acting'
-                ? 'Long-acting insulin'
-                : route.params.type === 'tablets'
-                ? 'Tablets'
-                : 'Correction dose',
-            })}
-          />
-          <Stack.Screen name="EditMeal" component={EditMealScreen} options={{ title: 'Edit meal' }} />
-          <Stack.Screen name="EditInsulin" component={EditInsulinScreen} options={{ title: 'Edit entry' }} />
-          <Stack.Screen name="EditHypo" component={EditHypoScreen} options={{ title: 'Edit treatment' }} />
-          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-          <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
-          <Stack.Screen name="Help" component={HelpScreen} options={{ title: 'Help & FAQ' }} />
-        </Stack.Navigator>
-      </NavigationContainer>
-      <PortalHost />
-    </SafeAreaProvider>
+    <NavigationContainer theme={BolusBrainDarkTheme}>
+      <StatusBar style="light" />
+      <Stack.Navigator
+        initialRouteName={session ? initialRoute : 'Login'}
+        screenOptions={{
+          headerStyle: { backgroundColor: '#050706' },
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '600' },
+          contentStyle: { backgroundColor: '#050706' },
+        }}
+      >
+        {!session ? (
+          // Unauthenticated stack
+          <>
+            <Stack.Screen
+              name="Login"
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="SignUp"
+              component={SignUpScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        ) : (
+          // Authenticated stack (all existing screens)
+          <>
+            <Stack.Screen
+              name="DataSharingOnboarding"
+              component={DataSharingOnboardingScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="AboutMeOnboarding"
+              component={AboutMeOnboardingScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="EquipmentOnboarding"
+              component={EquipmentOnboardingScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
+            <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="MealLog" component={MealLogScreen} options={{ title: 'Log meal' }} />
+            <Stack.Screen name="MealHistory" component={MealHistoryScreen} options={{ title: 'History' }} />
+            <Stack.Screen
+              name="InsulinLog"
+              component={InsulinLogScreen}
+              options={({ route }) => ({
+                title: route.params.type === 'long-acting'
+                  ? 'Long-acting insulin'
+                  : route.params.type === 'tablets'
+                  ? 'Tablets'
+                  : 'Correction dose',
+              })}
+            />
+            <Stack.Screen name="EditMeal" component={EditMealScreen} options={{ title: 'Edit meal' }} />
+            <Stack.Screen name="EditInsulin" component={EditInsulinScreen} options={{ title: 'Edit entry' }} />
+            <Stack.Screen name="EditHypo" component={EditHypoScreen} options={{ title: 'Edit treatment' }} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+            <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
+            <Stack.Screen name="Help" component={HelpScreen} options={{ title: 'Help & FAQ' }} />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <SafeAreaProvider>
+        <AppNavigator />
+        <PortalHost />
+      </SafeAreaProvider>
+    </AuthProvider>
   );
 }
