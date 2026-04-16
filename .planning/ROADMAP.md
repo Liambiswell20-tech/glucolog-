@@ -14,7 +14,9 @@ Milestone 2 transforms BolusBrain from a data-collection app into an intelligent
 - [ ] **Phase 6: Route to Market** - Complete landing page, email capture, and MHRA regulatory contact
 - [x] **Phase 8: B2B Data Capture Layer** - Equipment onboarding gate, equipment changelog, meal stamping, hypo treatment quick log, TIR calculation, and data consent — positioning the dataset for acquisition (completed 2026-03-31)
 - [ ] **Phase 9: Pre-Beta Polish** - Onboarding rework (data sharing + about me screens), hypo treatment rework, tablet dosing, history tabs with long-acting view, help copy update, keyboard and navigation bug fixes
-- [ ] **Phase 10: Supabase Migration & Multi-User Backend** - Migrate from AsyncStorage to Supabase (auth, PostgreSQL, encrypted storage), server-side rate limiting, AI consent flow, multi-user data isolation
+- [x] **Phase 10: UI Component Library & Charting** - Install React Native Reusables + NativeWind v4, refactor core components to design system (completed 2026-04-14)
+- [x] **Phase 10.5: MemStack Selective Install** - Persistent session memory, structured handoffs, commit standards (completed 2026-04-14)
+- [ ] **Phase 11: Supabase Migration & Multi-User Backend** - Migrate from AsyncStorage to Supabase (auth, PostgreSQL, encrypted storage), server-side rate limiting, AI consent flow, multi-user data isolation
 
 ## Phase Details
 
@@ -135,8 +137,10 @@ Phases 1 -> 2 -> 3 -> 4 -> 5 execute in numeric order.
 | 5. Data Model Extensions and Editing | 0/TBD | Not started | - |
 | 6. Route to Market | 0/3 | Planned | - |
 | 8. B2B Data Capture Layer | 8/8 | Complete   | 2026-03-31 |
-| 9. Pre-Beta Polish | 0/7 | Planned | - |
-| 10. Supabase Migration & Multi-User Backend | 0/TBD | Not started | - |
+| 9. Pre-Beta Polish | 7/7 | Complete   | 2026-04-08 |
+| 10. UI Component Library & Charting | —/— | Complete   | 2026-04-14 |
+| 10.5. MemStack Selective Install | —/— | Complete   | 2026-04-14 |
+| 11. Supabase Migration & Multi-User Backend | 0/TBD | Not started | - |
 
 ### Phase 7: Premium features and monetization strategy
 
@@ -148,9 +152,9 @@ Phases 1 -> 2 -> 3 -> 4 -> 5 execute in numeric order.
 Plans:
 - [ ] TBD (run /gsd:plan-phase 7 to break down)
 
-### Phase 10: Supabase Migration & Multi-User Backend
+### Phase 11: Supabase Migration & Multi-User Backend
 **Goal**: The app moves from local-only AsyncStorage to Supabase as the backend — with auth (email/password + biometric), encrypted health data storage, server-side rate limiting on the carb estimate proxy, AI consent flow, multi-user data isolation, and data migration from AsyncStorage to cloud — enabling multiple beta users to use the app independently
-**Depends on**: Phase 9 (pre-beta polish must be complete before backend migration)
+**Depends on**: Phase 9 (pre-beta polish), Phase 10 (UI library), Phase 10.5 (MemStack) — all complete
 **Requirements**: TBD
 **Success Criteria** (what must be TRUE):
   1. Users can sign up and sign in with email/password — biometric unlock (Face ID / fingerprint) available after first login
@@ -210,3 +214,29 @@ Plans:
 - [x] 08-06-PLAN.md — Wave 3: HypoTreatmentSheet + HomeScreen hypo button + useAppForeground hook + App.tsx TIR/recovery foreground handler
 - [x] 08-07-PLAN.md — Wave 3: Data & Research consent toggle in SettingsScreen (versioned, OFF by default)
 - [x] 08-08-PLAN.md — Wave 4: Full test run + human verification checkpoint (all B2B-01 through B2B-08 acceptance checks)
+
+### Phase 10: UI Component Library & Charting
+**Goal**: Core UI moved to a design system foundation — NativeWind v4 + React Native Reusables (RNR) components (Card, Badge, Button, Dialog, Switch, Skeleton, Alert, Label, Tabs, Separator, Text, Input) with design tokens (bb-background, bb-surface, bb-green, etc.) and JetBrains Mono/Inter font loading — enabling consistent styling across every screen without bespoke StyleSheets
+**Depends on**: Phase 9 (pre-beta polish)
+**Status**: Complete 2026-04-14 (git tags: `phase-10-complete`, `v0.7-beta`)
+**Plans**: Built outside GSD (direct implementation over 2 sessions)
+**Key outcomes**:
+  - NativeWind v4 (Tailwind CSS v3) with design tokens + `~/` path alias
+  - RNR components installed and wired into MealHistoryCard, OutcomeBadge, save buttons, delete dialogs, Settings switches, loading skeletons
+  - Long-acting insulin filtered from Meals tab (now Long-acting tab only)
+  - Trend arrow added to HomeScreen arc gauge
+  - Reverted: `react-native-gifted-charts` (data offset bug), RNR Tabs on MealBottomSheet/MealHistoryScreen (render bug) — SVG charts + Pressable tabs retained
+  - Protected components verified untouched: SafetyDisclaimer, arc gauge, equipment onboarding/changelog, hypo treatment, TIR, data consent, `getMealFingerprint`, AI carb estimation, Nightscout integration
+
+### Phase 10.5: MemStack Selective Install
+**Goal**: Persistent session memory, structured handoffs, and commit discipline for Claude Code — without conflicting with existing GSD + CARL infrastructure
+**Depends on**: Phase 10
+**Status**: Complete 2026-04-14 (commit `6a28785`)
+**Plans**: Built outside GSD (selective install)
+**Key outcomes**:
+  - Rules installed: Echo (memory recall), Diary (session logging), memstack.md (commit/build standards), headroom.md (proxy docs)
+  - Commands: `/memstack-search`, `/memstack-headroom`
+  - SQLite DB initialized at `memstack/db/memstack.db`
+  - All paths absolute for cross-directory compatibility
+  - Skipped by design: all hooks (conflict with CARL + GSD), Headroom proxy (risky without auto-start), work.md (overlaps GSD), notify/nudges/pro-skills/MCP rules
+  - Zero app code changes
