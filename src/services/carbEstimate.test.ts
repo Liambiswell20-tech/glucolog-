@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getRemainingEstimates, estimateCarbsFromPhoto, RateLimitError } from './carbEstimate';
+import { getRemainingEstimates, estimateCarbsFromPhoto, RateLimitError, ConsentRequiredError } from './carbEstimate';
 
 // Mock global fetch
 const mockFetch = jest.fn();
@@ -12,8 +12,46 @@ jest.mock('expo-file-system', () => ({
   })),
 }));
 
+// Mock supabase client
+const mockGetUser = jest.fn();
+const mockGetSession = jest.fn();
+const mockSelect = jest.fn();
+const mockEq = jest.fn();
+const mockIs = jest.fn();
+const mockMaybeSingle = jest.fn();
+
+jest.mock('../../lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getUser: () => mockGetUser(),
+      getSession: () => mockGetSession(),
+    },
+    from: () => ({
+      select: () => ({ eq: () => ({ eq: () => ({ is: () => ({ maybeSingle: () => mockMaybeSingle() }) }) }) }),
+    }),
+  },
+}));
+
+function mockConsentGranted() {
+  mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+  mockMaybeSingle.mockResolvedValue({ data: { version: '1.0' }, error: null });
+  mockGetSession.mockResolvedValue({ data: { session: { access_token: 'test-token' } } });
+}
+
+function mockConsentMissing() {
+  mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+  mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+}
+
+beforeEach(() => {
+  mockConsentGranted();
+});
+
 afterEach(async () => {
   mockFetch.mockReset();
+  mockGetUser.mockReset();
+  mockGetSession.mockReset();
+  mockMaybeSingle.mockReset();
   await AsyncStorage.clear();
 });
 
@@ -66,5 +104,10 @@ describe('estimateCarbsFromPhoto', () => {
       json: async () => ({ error: 'Server error' }),
     });
     await expect(estimateCarbsFromPhoto('file:///photo.jpg')).rejects.toThrow('Server error');
+  });
+
+  it('throws ConsentRequiredError when AI consent is missing', async () => {
+    mockConsentMissing();
+    await expect(estimateCarbsFromPhoto('file:///photo.jpg')).rejects.toBeInstanceOf(ConsentRequiredError);
   });
 });
