@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-04-16T22:24:12.812Z"
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-04-16T22:25:49.492Z"
 progress:
   total_phases: 12
   completed_phases: 5
   total_plans: 47
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 11 (supabase-migration-multi-user-backend) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Plan: 2 of 8
 | Phase 09 P02 | 8 | 2 tasks | 3 files |
 | Phase 09 P06 | 6 | 2 tasks | 7 files |
 | Phase 11 P03 | 2 | 1 tasks | 3 files |
+| Phase 11 P01 | 4 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,9 @@ Key constraints affecting this milestone:
 - [Phase 11]: Used getUser(jwt) for server-side JWT validation (not getSession) per Supabase best practices
 - [Phase 11]: Reservation pattern: INSERT before Anthropic call to prevent retry storms even if API fails
 - [Phase 11]: Graceful degradation: carb-estimate proxy works without JWT during rollout transition
+- [Phase 11]: loadOnboardingFlag takes string key param (generic) rather than separate functions per flag
+- [Phase 11]: STORAGE_KEYS exported as const object for type-safe key access by migration runner
+- [Phase 11]: App.tsx hypo recovery refactored to use fetchAndStoreHypoRecoveryCurve per-treatment rather than manual batch mutation
 
 ### Roadmap Evolution
 
@@ -168,6 +172,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T22:24:12.806Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-04-16T22:25:49.487Z
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
