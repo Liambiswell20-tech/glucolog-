@@ -74,6 +74,17 @@
 - [ ] **BETA-06**: Help & FAQ data sharing section updated to say data is fully anonymised and used to help improve diabetes care.
 - [x] **BETA-07**: Keyboard no longer obscures save buttons across all screens (standardised KeyboardAvoidingView). No white flash on home navigation transitions (NavigationContainer custom dark theme + consistent background colours).
 
+### Supabase Migration & Multi-User Backend
+
+- [ ] **SUPA-01**: Users can sign up and sign in with email/password -- biometric unlock (Face ID / fingerprint) available after first login. Session persisted in expo-secure-store with LargeSecureStore adapter. Auth-gated navigation: unauthenticated users see Login, authenticated users see existing onboarding/Home flow.
+- [ ] **SUPA-02**: All health data (glucose, meals, insulin, HbA1c) stored in Supabase PostgreSQL with row-level security -- each user sees only their own data. 9 tables with RLS enabled and policies using `auth.uid() = user_id`. Primary keys use `gen_random_uuid()` (never `crypto.randomUUID`).
+- [ ] **SUPA-03**: Health data encrypted at rest (GDPR Article 9 special category data compliance) via Supabase default AES-256 encryption. Session tokens encrypted client-side via LargeSecureStore (AES-CTR with keys in expo-secure-store).
+- [ ] **SUPA-04**: Server-side rate limiting on `/api/carb-estimate` proxy (JWT-based, 10 req/day/user) -- client-side bypass eliminated. Rate tracked in `ai_carb_requests` table with reservation pattern (INSERT before API call). HTTP 429 returned with Retry-After header when exceeded.
+- [ ] **SUPA-05**: AI consent modal shown before first carb estimate: "Your photo is sent to Anthropic's Claude API for carb estimation and is not stored by them" -- one-tap accept, persisted in `ai_consent_records` table with version 1.0. Revokable in Settings Data & Research section. MealLogScreen catches ConsentRequiredError and shows modal with retry.
+- [ ] **SUPA-06**: Existing AsyncStorage data migrated to Supabase via manual "Migrate my data" button in Settings -- migration is idempotent (UNIQUE constraints + upsert), chunked at 50 rows, preserves all historical meals, insulin logs, equipment profiles, hypo treatments, TIR, and consent records. AsyncStorage NEVER wiped. Pre-migration refactor consolidates all direct AsyncStorage calls into storage.ts.
+- [ ] **SUPA-07**: Data sharing toggle enforced server-side -- when user turns off, their data is excluded from any aggregation queries. Enforcement helper function `dataSharingFilter()` exported for use by any future aggregation query.
+- [ ] **SUPA-08**: HelpScreen copy updated to accurately reflect that photos pass through Anthropic's servers for carb estimation -- FAQ answer includes "sent to Anthropic's Claude API for processing and is not stored by them" with consent requirement mentioned.
+
 ## v2 Requirements
 
 ### Pattern Intelligence (deferred -- needs data volume)
@@ -99,7 +110,6 @@
 | Prediction engine | Deferred until 50+ meals logged AND 90+ days of data; requires MHRA guidance + potentially regulatory solicitor |
 | "You should take X units" language anywhere | Non-negotiable legal constraint -- replaced by "last time you ate this, you took X units" |
 | Suggestions before 90 days of data | Statistically meaningless and potentially misleading for T1D management |
-| Multi-user support | Requires backend + auth -- v2 milestone |
 | Social or sharing features | Out of scope for personal app v1 |
 | Carb database lookup | UK CoFID AI estimation is the approach -- no USDA lookup, no pre-built database |
 | Gamification | Inappropriate for medical context |
@@ -147,12 +157,21 @@
 | BETA-05 | Phase 9 | Complete |
 | BETA-06 | Phase 9 | Pending |
 | BETA-07 | Phase 9 | Complete |
+| SUPA-01 | Phase 11 | Pending |
+| SUPA-02 | Phase 11 | Pending |
+| SUPA-03 | Phase 11 | Pending |
+| SUPA-04 | Phase 11 | Pending |
+| SUPA-05 | Phase 11 | Pending |
+| SUPA-06 | Phase 11 | Pending |
+| SUPA-07 | Phase 11 | Pending |
+| SUPA-08 | Phase 11 | Pending |
 
 **Coverage:**
 - v1 requirements: 34 total
-- Mapped to phases: 34
+- Supabase requirements: 8 total
+- Mapped to phases: 42
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-04-08 -- Pre-Beta Polish requirements (BETA-01 through BETA-07) added, mapped to Phase 9*
+*Last updated: 2026-04-16 -- Supabase Migration requirements (SUPA-01 through SUPA-08) added, mapped to Phase 11*
