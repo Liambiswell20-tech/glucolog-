@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useAppForeground } from './src/hooks/useAppForeground';
+import { promptBiometric, isBiometricEnabled, setBiometricEnabled, canUseBiometric } from './src/hooks/useBiometric';
 import { getDailyTIRHistory, calculateDailyTIR, storeDailyTIR } from './src/utils/timeInRange';
 import { fetchGlucoseRange } from './src/services/nightscout';
 import DataSharingOnboardingScreen from './src/screens/DataSharingOnboardingScreen';
@@ -70,7 +71,7 @@ const BolusBrainDarkTheme = {
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function AppNavigator() {
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, signOut } = useAuth();
 
   const [fontsLoaded, fontError] = useFonts({
     Outfit_400Regular,
@@ -80,6 +81,8 @@ function AppNavigator() {
 
   const [gateChecked, setGateChecked] = useState(false);
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList>('Home');
+  const [biometricChecked, setBiometricChecked] = useState(false);
+  const [biometricPassed, setBiometricPassed] = useState(false);
 
   useEffect(() => {
     migrateLegacySessions().catch(err =>
@@ -118,6 +121,47 @@ function AppNavigator() {
     }
     checkOnboarding();
   }, []);
+
+  // After first login, auto-enable biometric if device supports it
+  useEffect(() => {
+    if (!session) return;
+    canUseBiometric().then(available => {
+      if (available) {
+        setBiometricEnabled(true).catch(() => {});
+      }
+    });
+  }, [session]);
+
+  // Biometric gate: prompt on app open if session exists and biometric is enabled
+  useEffect(() => {
+    if (authLoading) return; // wait for session to load
+    if (!session) {
+      // No session = no biometric needed, go straight to login
+      setBiometricChecked(true);
+      setBiometricPassed(false);
+      return;
+    }
+    // Session exists — check if biometric is enabled
+    isBiometricEnabled().then(async (enabled) => {
+      if (!enabled) {
+        // Biometric not enabled — skip prompt
+        setBiometricChecked(true);
+        setBiometricPassed(true);
+        return;
+      }
+      // Prompt biometric
+      const success = await promptBiometric('Unlock BolusBrain');
+      if (success) {
+        setBiometricChecked(true);
+        setBiometricPassed(true);
+      } else {
+        // Biometric failed — sign out via useAuth() hook and show login screen
+        await signOut();
+        setBiometricChecked(true);
+        setBiometricPassed(false);
+      }
+    });
+  }, [authLoading, session]);
 
   // Release splash when fonts ready OR after error
   useEffect(() => {
@@ -178,7 +222,7 @@ function AppNavigator() {
 
   // Don't render navigation until fonts are ready (or errored/timed out),
   // auth state is loaded, and gate check resolves — prevents flash of wrong screen
-  if (authLoading || (!fontsLoaded && !fontError) || !gateChecked) {
+  if (authLoading || !biometricChecked || (!fontsLoaded && !fontError) || !gateChecked) {
     return <View style={{ flex: 1, backgroundColor: '#050706' }} />;
   }
 
