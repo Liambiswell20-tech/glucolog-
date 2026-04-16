@@ -77,8 +77,8 @@
 ### Supabase Migration & Multi-User Backend
 
 - [ ] **SUPA-01**: Users can sign up and sign in with email/password -- biometric unlock (Face ID / fingerprint) available after first login. Session persisted in expo-secure-store with LargeSecureStore adapter. Auth-gated navigation: unauthenticated users see Login, authenticated users see existing onboarding/Home flow.
-- [ ] **SUPA-02**: All health data (glucose, meals, insulin, HbA1c) stored in Supabase PostgreSQL with row-level security -- each user sees only their own data. 9 tables with RLS enabled and policies using `auth.uid() = user_id`. Primary keys use `gen_random_uuid()` (never `crypto.randomUUID`).
-- [ ] **SUPA-03**: Health data encrypted at rest (GDPR Article 9 special category data compliance) via Supabase default AES-256 encryption. Session tokens encrypted client-side via LargeSecureStore (AES-CTR with keys in expo-secure-store).
+- [x] **SUPA-02**: All health data (glucose, meals, insulin, HbA1c) stored in Supabase PostgreSQL with row-level security -- each user sees only their own data. 9 tables with RLS enabled and policies using `auth.uid() = user_id`. Primary keys use `gen_random_uuid()` (never `crypto.randomUUID`).
+- [x] **SUPA-03**: Health data encrypted at rest (GDPR Article 9 special category data compliance) via Supabase default AES-256 encryption. Session tokens encrypted client-side via LargeSecureStore (AES-CTR with keys in expo-secure-store).
 - [x] **SUPA-04**: Server-side rate limiting on `/api/carb-estimate` proxy (JWT-based, 10 req/day/user) -- client-side bypass eliminated. Rate tracked in `ai_carb_requests` table with reservation pattern (INSERT before API call). HTTP 429 returned with Retry-After header when exceeded.
 - [ ] **SUPA-05**: AI consent modal shown before first carb estimate: "Your photo is sent to Anthropic's Claude API for carb estimation and is not stored by them" -- one-tap accept, persisted in `ai_consent_records` table with version 1.0. Revokable in Settings Data & Research section. MealLogScreen catches ConsentRequiredError and shows modal with retry.
 - [x] **SUPA-06**: Existing AsyncStorage data migrated to Supabase via manual "Migrate my data" button in Settings -- migration is idempotent (UNIQUE constraints + upsert), chunked at 50 rows, preserves all historical meals, insulin logs, equipment profiles, hypo treatments, TIR, and consent records. AsyncStorage NEVER wiped. Pre-migration refactor consolidates all direct AsyncStorage calls into storage.ts.
@@ -158,8 +158,8 @@
 | BETA-06 | Phase 9 | Pending |
 | BETA-07 | Phase 9 | Complete |
 | SUPA-01 | Phase 11 | Pending |
-| SUPA-02 | Phase 11 | Pending |
-| SUPA-03 | Phase 11 | Pending |
+| SUPA-02 | Phase 11 | Complete |
+| SUPA-03 | Phase 11 | Complete |
 | SUPA-04 | Phase 11 | Complete |
 | SUPA-05 | Phase 11 | Pending |
 | SUPA-06 | Phase 11 | Complete |

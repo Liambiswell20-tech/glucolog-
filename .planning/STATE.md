@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-04-16T22:25:49.492Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-04-16T22:27:27.908Z"
 progress:
   total_phases: 12
   completed_phases: 5
   total_plans: 47
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 11 (supabase-migration-multi-user-backend) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Plan: 3 of 8
 | Phase 09 P06 | 6 | 2 tasks | 7 files |
 | Phase 11 P03 | 2 | 1 tasks | 3 files |
 | Phase 11 P01 | 4 | 2 tasks | 3 files |
+| Phase 11 P02 | 5 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,10 @@ Key constraints affecting this milestone:
 - [Phase 11]: loadOnboardingFlag takes string key param (generic) rather than separate functions per flag
 - [Phase 11]: STORAGE_KEYS exported as const object for type-safe key access by migration runner
 - [Phase 11]: App.tsx hypo recovery refactored to use fetchAndStoreHypoRecoveryCurve per-treatment rather than manual batch mutation
+- [Phase 11]: LargeSecureStore stores AES key in SecureStore (2KB safe), encrypted session in AsyncStorage (no size limit)
+- [Phase 11]: detectSessionInUrl: false is critical for React Native — prevents browser URL parsing warnings
+- [Phase 11]: All table PKs use Postgres gen_random_uuid() — never crypto.randomUUID() (caused previous revert)
+- [Phase 11]: UNIQUE(user_id, client_id) on 5 migration-target tables enables idempotent upsert
 
 ### Roadmap Evolution
 
@@ -172,6 +177,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T22:25:49.487Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-04-16T22:27:27.903Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
