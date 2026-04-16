@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-04-16T22:27:27.908Z"
+stopped_at: Completed 11-04-PLAN.md
+last_updated: "2026-04-16T22:33:56.573Z"
 progress:
   total_phases: 12
   completed_phases: 5
   total_plans: 47
-  completed_plans: 38
+  completed_plans: 39
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 11 (supabase-migration-multi-user-backend) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 
 ## Performance Metrics
 
@@ -80,6 +80,7 @@ Plan: 4 of 8
 | Phase 11 P03 | 2 | 1 tasks | 3 files |
 | Phase 11 P01 | 4 | 2 tasks | 3 files |
 | Phase 11 P02 | 5 | 2 tasks | 8 files |
+| Phase 11 P04 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,10 @@ Key constraints affecting this milestone:
 - [Phase 11]: detectSessionInUrl: false is critical for React Native — prevents browser URL parsing warnings
 - [Phase 11]: All table PKs use Postgres gen_random_uuid() — never crypto.randomUUID() (caused previous revert)
 - [Phase 11]: UNIQUE(user_id, client_id) on 5 migration-target tables enables idempotent upsert
+- [Phase 11]: App.tsx refactored into App() wrapper + AppNavigator() child to enable useAuth() inside AuthProvider
+- [Phase 11]: Email lowercased and trimmed on submit to prevent case-sensitivity login failures
+- [Phase 11]: Password minimum 6 characters enforced client-side on sign-up (matches Supabase default)
+- [Phase 11]: Confirm password field added to SignUpScreen for input validation before API call
 
 ### Roadmap Evolution
 
@@ -177,6 +182,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T22:27:27.903Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-04-16T22:33:56.559Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None
