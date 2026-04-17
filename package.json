@@ -16,7 +16,9 @@
       "<rootDir>/src/**/*.test.tsx"
     ],
     "moduleNameMapper": {
-      "@react-native-async-storage/async-storage": "@react-native-async-storage/async-storage/jest/async-storage-mock"
+      "@react-native-async-storage/async-storage": "@react-native-async-storage/async-storage/jest/async-storage-mock",
+      "expo-secure-store": "<rootDir>/__mocks__/expo-secure-store.ts",
+      "expo-local-authentication": "<rootDir>/__mocks__/expo-local-authentication.ts"
     }
   },
   "dependencies": {
