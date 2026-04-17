@@ -19,6 +19,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { loadSettings, saveSettings, AppSettings } from '../services/settings';
 import { loadTabletDosing, saveTabletDosing } from '../services/storage';
+import { migrateToSupabase, getMigrationStatus, MigrationProgress } from '../services/migration';
+import { useAuth } from '../contexts/AuthContext';
 import { getCurrentEquipmentProfile, changeEquipment } from '../utils/equipmentProfile';
 import EquipmentChangeConfirmation from '../components/EquipmentChangeConfirmation';
 import { Switch } from '~/components/ui/switch';
@@ -94,11 +96,17 @@ function getPickerOptions(field: string): string[] {
 
 export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { session, signOut } = useAuth();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [tablets, setTablets] = useState<TabletDosing[]>([]);
   const [consent, setConsent] = useState<DataConsent>({ consented: false, version: CURRENT_CONSENT_VERSION });
   const [reConsentModalVisible, setReConsentModalVisible] = useState(false);
+
+  // Migration state
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationDone, setMigrationDone] = useState(false);
 
   // AI consent state (Supabase ai_consent_records)
   const [aiConsentEnabled, setAiConsentEnabled] = useState(false);
@@ -156,6 +164,27 @@ export default function SettingsScreen() {
     const profile = await getCurrentEquipmentProfile();
     setActiveProfile(profile);
   }, []);
+
+  // ─── Migration handler ──────────────────────────────────────────────────────
+
+  async function handleMigrate() {
+    if (migrating) return;
+    setMigrating(true);
+    setMigrationProgress(null);
+    try {
+      const result = await migrateToSupabase((p) => setMigrationProgress(p));
+      setMigrationProgress(result);
+      if (result.stage === 'succeeded') setMigrationDone(true);
+    } catch (err) {
+      setMigrationProgress({
+        stage: 'failed', totalRecords: 0, migratedRecords: 0,
+        currentCollection: '', failedCollections: [],
+        error: err instanceof Error ? err.message : 'Migration failed',
+      });
+    } finally {
+      setMigrating(false);
+    }
+  }
 
   // ─── AI consent helpers (Supabase ai_consent_records) ──────────────────────
 
@@ -221,6 +250,7 @@ export default function SettingsScreen() {
     const loadedTablets = await loadTabletDosing();
     setTablets(loadedTablets);
     await loadAIConsent();
+    getMigrationStatus().then(({ completed }) => setMigrationDone(completed));
   }, [loadEquipment]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -436,7 +466,15 @@ export default function SettingsScreen() {
           {/* Account */}
           <SectionHeader title="Account" />
           <View style={styles.card}>
-            <NavRow label="Account details" onPress={() => navigation.navigate('Account')} />
+            <NavRow label={session?.user.email ?? 'Account details'} onPress={() => navigation.navigate('Account')} />
+            {session && (
+              <>
+                <View style={styles.divider} />
+                <Pressable style={styles.navRow} onPress={() => { signOut(); }}>
+                  <Text style={[styles.navRowLabel, { color: COLORS.red }]}>Sign out</Text>
+                </Pressable>
+              </>
+            )}
           </View>
 
           {/* Help */}
@@ -479,6 +517,43 @@ export default function SettingsScreen() {
               </>
             )}
           </View>
+
+          {/* Cloud Backup */}
+          {session && (
+            <>
+              <SectionHeader title="Cloud Backup" />
+              <View style={styles.card}>
+                {migrationDone ? (
+                  <View style={styles.navRow}>
+                    <Text style={[styles.navRowLabel, { color: COLORS.green }]}>Data migrated to cloud</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={[styles.navRow, migrating && { opacity: 0.5 }]}
+                    onPress={handleMigrate}
+                    disabled={migrating}
+                  >
+                    <Text style={styles.navRowLabel}>
+                      {migrating
+                        ? `Migrating... ${migrationProgress?.migratedRecords ?? 0}/${migrationProgress?.totalRecords ?? '?'}`
+                        : 'Migrate my data to the cloud'}
+                    </Text>
+                    <Text style={styles.navRowChevron}>{'\u203A'}</Text>
+                  </Pressable>
+                )}
+                {migrationProgress?.stage === 'partial' && (
+                  <Text style={[styles.hint, { color: COLORS.amber }]}>
+                    Some data could not be migrated: {migrationProgress.failedCollections.join(', ')}. Tap to retry.
+                  </Text>
+                )}
+                {migrationProgress?.stage === 'failed' && (
+                  <Text style={[styles.hint, { color: COLORS.red }]}>
+                    {migrationProgress.error}
+                  </Text>
+                )}
+              </View>
+            </>
+          )}
 
           {/* Save */}
           <Pressable
@@ -689,5 +764,11 @@ const styles = StyleSheet.create({
     color: COLORS.green,
     fontSize: 15,
     fontFamily: FONTS.semiBold,
+  },
+  hint: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 13,
+    fontFamily: FONTS.regular,
   },
 });
