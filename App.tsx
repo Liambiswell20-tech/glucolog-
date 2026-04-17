@@ -1,11 +1,11 @@
 import "./global.css";
-import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts, Outfit_400Regular, Outfit_600SemiBold } from '@expo-google-fonts/outfit';
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useAppForeground } from './src/hooks/useAppForeground';
 import { promptBiometric, isBiometricEnabled, setBiometricEnabled, canUseBiometric } from './src/hooks/useBiometric';
@@ -72,6 +72,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function AppNavigator() {
   const { session, loading: authLoading, signOut } = useAuth();
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
 
   const [fontsLoaded, fontError] = useFonts({
     Outfit_400Regular,
@@ -83,6 +84,8 @@ function AppNavigator() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList>('Home');
   const [biometricChecked, setBiometricChecked] = useState(false);
   const [biometricPassed, setBiometricPassed] = useState(false);
+  // Track whether user logged in during this app session (skip biometric if so)
+  const hadSessionOnMount = useRef<boolean | null>(null);
 
   useEffect(() => {
     migrateLegacySessions().catch(err =>
@@ -122,9 +125,25 @@ function AppNavigator() {
     checkOnboarding();
   }, []);
 
-  // After first login, auto-enable biometric if device supports it
+  // After login/signup, reset navigation to the correct route (onboarding or Home)
+  // Tracks previous session to only fire on null→non-null transitions (login), not token refreshes
+  const prevSession = useRef<typeof session>(undefined as any);
   useEffect(() => {
-    if (!session) return;
+    const wasNull = prevSession.current === null || prevSession.current === undefined;
+    prevSession.current = session;
+    if (session && wasNull && gateChecked && navigationRef.isReady()) {
+      navigationRef.reset({
+        index: 0,
+        routes: [{ name: initialRoute }],
+      });
+    }
+  }, [session, gateChecked]);
+
+  // After first login, auto-enable biometric if device supports it (runs once)
+  const biometricAutoEnabled = useRef(false);
+  useEffect(() => {
+    if (!session || biometricAutoEnabled.current) return;
+    biometricAutoEnabled.current = true;
     canUseBiometric().then(available => {
       if (available) {
         setBiometricEnabled(true).catch(() => {});
@@ -132,16 +151,25 @@ function AppNavigator() {
     });
   }, [session]);
 
-  // Biometric gate: prompt on app open if session exists and biometric is enabled
+  // Biometric gate: prompt ONCE on cold app open if session exists and biometric is enabled.
+  // Does NOT re-run on session refresh (token rotation) — only on initial auth load.
+  const biometricRan = useRef(false);
   useEffect(() => {
     if (authLoading) return; // wait for session to load
+    if (biometricRan.current) return; // already ran — don't re-prompt on token refresh
+    biometricRan.current = true;
+
+    // Capture whether a session existed when auth first loaded
+    hadSessionOnMount.current = !!session;
+
     if (!session) {
       // No session = no biometric needed, go straight to login
       setBiometricChecked(true);
       setBiometricPassed(false);
       return;
     }
-    // Session exists — check if biometric is enabled
+
+    // Cold open with existing session — check if biometric is enabled
     isBiometricEnabled().then(async (enabled) => {
       if (!enabled) {
         // Biometric not enabled — skip prompt
@@ -161,7 +189,7 @@ function AppNavigator() {
         setBiometricPassed(false);
       }
     });
-  }, [authLoading, session]);
+  }, [authLoading]);
 
   // Release splash when fonts ready OR after error
   useEffect(() => {
@@ -227,7 +255,7 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={BolusBrainDarkTheme}>
+    <NavigationContainer ref={navigationRef} theme={BolusBrainDarkTheme}>
       <StatusBar style="light" />
       <Stack.Navigator
         initialRouteName={session ? initialRoute : 'Login'}

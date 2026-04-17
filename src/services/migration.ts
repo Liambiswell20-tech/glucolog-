@@ -59,8 +59,7 @@ export async function migrateToSupabase(
     loadDataConsentRaw(),
   ]);
 
-  // NOTE: Tablets (loadTabletDosing) are NOT included — no Supabase table exists for them.
-  // They stay local-only. Do NOT count them in totalRecords.
+  // Tablets go to tablet_doses, insulin goes to insulin_doses
   const total = meals.length + insulin.length + hypos.length + equipment.length +
     tir.length + (profile ? 1 : 0) + (consent ? 1 : 0);
 
@@ -115,11 +114,12 @@ export async function migrateToSupabase(
     }
   }
 
-  // --- Insulin doses ---
-  if (insulin.length > 0) {
+  // --- Insulin doses (exclude tablets — they're not insulin) ---
+  const insulinOnly = insulin.filter((l: InsulinLog) => l.type !== 'tablets');
+  if (insulinOnly.length > 0) {
     onProgress(progress('insulin_doses'));
     let insulinFailed = false;
-    for (const chunk of chunkArray(insulin, 50)) {
+    for (const chunk of chunkArray(insulinOnly, 50)) {
       const { error } = await supabase.from('insulin_doses').upsert(
         chunk.map((l: InsulinLog) => ({
           user_id: userId,
@@ -142,6 +142,36 @@ export async function migrateToSupabase(
       onProgress(progress('insulin_doses'));
     }
     if (insulinFailed) {
+      // Skip to next collection
+    }
+  }
+
+  // --- Tablet doses (separate from insulin) ---
+  const tablets = insulin.filter((l: InsulinLog) => l.type === 'tablets');
+  if (tablets.length > 0) {
+    onProgress(progress('tablet_doses'));
+    let tabletsFailed = false;
+    for (const chunk of chunkArray(tablets, 50)) {
+      const { error } = await supabase.from('tablet_doses').upsert(
+        chunk.map((l: InsulinLog) => ({
+          user_id: userId,
+          client_id: l.id,
+          units: l.units,
+          start_glucose: l.startGlucose,
+          logged_at: l.loggedAt,
+        })),
+        { onConflict: 'user_id,client_id' }
+      );
+      if (error) {
+        failed.push('tablet_doses');
+        console.warn('[migration] tablet chunk failed', error);
+        tabletsFailed = true;
+        break;
+      }
+      migrated += chunk.length;
+      onProgress(progress('tablet_doses'));
+    }
+    if (tabletsFailed) {
       // Skip to next collection
     }
   }

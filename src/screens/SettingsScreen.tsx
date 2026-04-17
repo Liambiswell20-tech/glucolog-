@@ -171,6 +171,9 @@ export default function SettingsScreen() {
     if (migrating) return;
     setMigrating(true);
     setMigrationProgress(null);
+    setMigrationDone(false);
+    // Clear the completion flag so migration always re-runs (idempotent upserts)
+    await AsyncStorage.removeItem('supabase_migration_v1_completed_at');
     try {
       const result = await migrateToSupabase((p) => setMigrationProgress(p));
       setMigrationProgress(result);
@@ -523,24 +526,20 @@ export default function SettingsScreen() {
             <>
               <SectionHeader title="Cloud Backup" />
               <View style={styles.card}>
-                {migrationDone ? (
-                  <View style={styles.navRow}>
-                    <Text style={[styles.navRowLabel, { color: COLORS.green }]}>Data migrated to cloud</Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={[styles.navRow, migrating && { opacity: 0.5 }]}
-                    onPress={handleMigrate}
-                    disabled={migrating}
-                  >
-                    <Text style={styles.navRowLabel}>
-                      {migrating
-                        ? `Migrating... ${migrationProgress?.migratedRecords ?? 0}/${migrationProgress?.totalRecords ?? '?'}`
-                        : 'Migrate my data to the cloud'}
-                    </Text>
-                    <Text style={styles.navRowChevron}>{'\u203A'}</Text>
-                  </Pressable>
-                )}
+                <Pressable
+                  style={[styles.navRow, migrating && { opacity: 0.5 }]}
+                  onPress={handleMigrate}
+                  disabled={migrating}
+                >
+                  <Text style={[styles.navRowLabel, migrationDone && { color: COLORS.green }]}>
+                    {migrating
+                      ? `Migrating... ${migrationProgress?.migratedRecords ?? 0}/${migrationProgress?.totalRecords ?? '?'}`
+                      : migrationDone
+                      ? 'Data migrated to cloud (tap to sync again)'
+                      : 'Migrate my data to the cloud'}
+                  </Text>
+                  <Text style={styles.navRowChevron}>{'\u203A'}</Text>
+                </Pressable>
                 {migrationProgress?.stage === 'partial' && (
                   <Text style={[styles.hint, { color: COLORS.amber }]}>
                     Some data could not be migrated: {migrationProgress.failedCollections.join(', ')}. Tap to retry.
