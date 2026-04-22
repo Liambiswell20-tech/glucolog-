@@ -101,6 +101,26 @@
         "nachos",
         "cheesy chips"
       ]
+    },
+    "non_carb": {
+      "digestion_window_minutes": 0,
+      "keywords": [
+        "black coffee",
+        "coffee",
+        "espresso",
+        "americano",
+        "tea",
+        "green tea",
+        "herbal tea",
+        "water",
+        "sparkling water",
+        "diet coke",
+        "diet pepsi",
+        "coke zero",
+        "pepsi max",
+        "sugar free squash",
+        "black tea"
+      ]
     }
   },
   "fallback_bucket": "mixed_meal",

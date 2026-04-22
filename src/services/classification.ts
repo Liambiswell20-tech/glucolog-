@@ -130,7 +130,30 @@ export function classifyMeal(
     }
   }
 
-  // Step 2: Carb bucket (if carbs known)
+  // Step 2: Non-carb check (Section 2 — 0g carbs + non_carb keyword)
+  // Only triggers when carbs === 0 AND name matches a non_carb keyword.
+  // This prevents "coffee cake" 30g from being classified as non_carb.
+  if (carbsGrams !== null && carbsGrams === 0) {
+    const nonCarbBucket = dict.buckets['non_carb'];
+    if (nonCarbBucket) {
+      const sortedKeywords = [...nonCarbBucket.keywords].sort(
+        (a, b) => b.length - a.length,
+      );
+      for (const keyword of sortedKeywords) {
+        if (nameLower.includes(keyword.toLowerCase())) {
+          return {
+            bucket: 'non_carb',
+            method: 'override_keyword',
+            matchedKeyword: keyword,
+            keywordsVersion: dict.version,
+            digestionWindowMinutes: nonCarbBucket.digestionWindowMinutes,
+          };
+        }
+      }
+    }
+  }
+
+  // Step 3: Carb bucket (if carbs known)
   if (carbsGrams !== null) {
     for (const threshold of CARB_THRESHOLDS) {
       if (carbsGrams <= threshold.maxCarbs) {
@@ -153,7 +176,7 @@ export function classifyMeal(
     };
   }
 
-  // Step 3: Fallback (carbs unknown, no keyword match)
+  // Step 4: Fallback (carbs unknown, no keyword match)
   return {
     bucket: dict.fallbackBucket,
     method: 'fallback',

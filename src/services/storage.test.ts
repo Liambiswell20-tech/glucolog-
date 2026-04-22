@@ -40,28 +40,34 @@ describe('computeAndCacheHba1c', () => {
 // --- saveMeal session grouping ---
 
 describe('saveMeal session grouping', () => {
-  it('creates a new solo session when no prior meals exist', async () => {
+  it('creates a solo meal with no session when no prior meals exist', async () => {
     const meal = await saveMeal(minimalMeal, new Date(baseTime));
-    expect(meal.sessionId).toBeTruthy();
+    // V2: solo meals have sessionId null (no session created until overlap detected)
+    expect(meal.sessionId).toBeNull();
   });
 
-  it('joins an existing open session when meal is logged 30 minutes after first', async () => {
+  it('groups two meals into a session when logged 30 minutes apart', async () => {
     const first = await saveMeal(minimalMeal, new Date(baseTime));
     const second = await saveMeal(
       { ...minimalMeal, name: 'Test meal 2' },
       new Date(baseTime + 30 * 60 * 1000)
     );
-    expect(second.sessionId).toBe(first.sessionId);
+    // V2: both should be in the same session (overlap detected)
+    expect(second.sessionId).toBeTruthy();
+    const meals = await loadMeals();
+    const firstUpdated = meals.find(m => m.id === first.id);
+    expect(firstUpdated?.sessionId).toBe(second.sessionId);
   });
 
-  it('creates a new independent session when meal is logged exactly 3hr+1min after first', async () => {
+  it('keeps meals solo when logged 3hr+1min apart (no overlap)', async () => {
     const first = await saveMeal(minimalMeal, new Date(baseTime));
     const second = await saveMeal(
       { ...minimalMeal, name: 'Test meal 2' },
       new Date(baseTime + THREE_HOURS_MS + 60000)
     );
-    expect(second.sessionId).not.toBe(first.sessionId);
-    expect(second.sessionId).toBeTruthy();
+    // V2: both stay solo — no overlap between their digestion windows
+    expect(first.sessionId).toBeNull();
+    expect(second.sessionId).toBeNull();
   });
 });
 

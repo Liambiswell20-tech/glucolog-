@@ -1,7 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurvePoint, fetchGlucoseRange } from './nightscout';
+import { classifyMeal, computeMatchingKey, loadKeywordDictionary } from './classification';
+import { detectOverlaps, groupOrCreateSession, reEvaluateOnEdit, reEvaluateOnDelete, computeSessionEnd } from './sessionGrouping';
+import type { OverlapMeal, SessionMutations } from './sessionGrouping';
+import { logSessionEvents } from './sessionEventLog';
 
 import type { HypoTreatment, UserProfile, TabletDosing, EquipmentChangeEntry, DataConsent } from '../types/equipment';
+
+// ---------------------------------------------------------------------------
+// Feature flag: set to false for one-line rollback to V1 session grouping
+// ---------------------------------------------------------------------------
+const USE_V2_SESSION_GROUPING = true;
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -20,6 +29,9 @@ const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const TEN_MINUTES_MS = 10 * 60 * 1000;
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const MATCHING_KEY_VERSION = 1;
 
 // Long-acting and correction dose logs — stored separately, never used in meal patterns.
 export type InsulinLogType = 'long-acting' | 'correction' | 'tablets';
@@ -236,7 +248,7 @@ export type SessionConfidence = 'high' | 'medium' | 'low';
 
 // --- Session Grouping V2 types (Phase A) ---
 
-export type ClassificationBucket = 'quick_sugar' | 'simple_snack' | 'mixed_meal' | 'fat_heavy';
+export type ClassificationBucket = 'quick_sugar' | 'simple_snack' | 'mixed_meal' | 'fat_heavy' | 'non_carb';
 export type ClassificationMethod = 'override_keyword' | 'carb_bucket' | 'fallback';
 
 export type SessionEventType =
@@ -377,21 +389,342 @@ function computeConfidence(mealCount: number): SessionConfidence {
   return 'low';
 }
 
+// --- timestamp validation (Section 4.5, 4.6) ---
+
+/** Section 4.6: reject timestamps >10min in the future. */
+export function validateMealTimestamp(
+  loggedAt: Date,
+  now: Date = new Date(),
+): { valid: boolean; error?: string } {
+  const diff = loggedAt.getTime() - now.getTime();
+  if (diff > TEN_MINUTES_MS) {
+    return { valid: false, error: 'Meal time cannot be in the future' };
+  }
+  return { valid: true };
+}
+
+/** Section 4.5: flag if backdate >6 hours for confirmation dialog. */
+export function isBackdateWarningNeeded(
+  loggedAt: Date,
+  now: Date = new Date(),
+): boolean {
+  const diff = now.getTime() - loggedAt.getTime();
+  return diff > SIX_HOURS_MS;
+}
+
 // --- public API ---
 
 export async function loadMeals(): Promise<Meal[]> {
   return loadMealsRaw();
 }
 
-export async function updateMeal(
+// ---------------------------------------------------------------------------
+// V1 preserved functions (rollback layer 2 — change USE_V2_SESSION_GROUPING to false)
+// ---------------------------------------------------------------------------
+
+async function _updateMealV1(
   id: string,
   changes: Partial<Pick<Meal, 'name' | 'photoUri' | 'insulinUnits' | 'loggedAt' | 'carbsEstimated'>>
 ): Promise<void> {
   const meals = await loadMealsRaw();
-  // If loggedAt is changing, the old curve is no longer valid — clear it
   const patch = 'loggedAt' in changes ? { ...changes, glucoseResponse: null } : changes;
   const updated = meals.map(m => (m.id === id ? { ...m, ...patch } : m));
   await saveMealsRaw(updated);
+}
+
+async function _deleteMealV1(id: string): Promise<void> {
+  const meals = await loadMealsRaw();
+  await saveMealsRaw(meals.filter(m => m.id !== id));
+}
+
+async function _saveMealV1(
+  meal: Omit<Meal, 'id' | 'loggedAt' | 'glucoseResponse' | 'sessionId'>,
+  loggedAt?: Date
+): Promise<Meal> {
+  const [meals, sessions] = await Promise.all([loadMealsRaw(), loadSessionsRaw()]);
+  const now = loggedAt ?? new Date();
+  const newMeal: Meal = { ...meal, id: generateId(), loggedAt: now.toISOString(), glucoseResponse: null, sessionId: null };
+  const activeSessions = new Set(
+    sessions.filter(s => { const elapsed = now.getTime() - new Date(s.startedAt).getTime(); return elapsed >= 0 && elapsed <= THREE_HOURS_MS; }).map(s => s.id)
+  );
+  const recentMeals = meals.filter(m => {
+    const elapsed = now.getTime() - new Date(m.loggedAt).getTime();
+    return elapsed >= 0 && elapsed <= THREE_HOURS_MS && (m.sessionId === null || activeSessions.has(m.sessionId));
+  });
+  let session: Session;
+  if (recentMeals.length === 0) {
+    session = { id: `s_${now.getTime()}`, mealIds: [newMeal.id], startedAt: newMeal.loggedAt, confidence: 'high', glucoseResponse: null };
+  } else {
+    const existingSessionId = recentMeals.find(m => m.sessionId)?.sessionId ?? null;
+    if (existingSessionId) {
+      const existing = sessions.find(s => s.id === existingSessionId)!;
+      const updatedIds = [...existing.mealIds, newMeal.id];
+      session = { ...existing, mealIds: updatedIds, confidence: computeConfidence(updatedIds.length) };
+    } else {
+      const allIds = [...recentMeals.map(m => m.id), newMeal.id];
+      const earliestStart = recentMeals.reduce((earliest, m) => (m.loggedAt < earliest ? m.loggedAt : earliest), recentMeals[0].loggedAt);
+      session = { id: `s_${now.getTime()}`, mealIds: allIds, startedAt: earliestStart, confidence: computeConfidence(allIds.length), glucoseResponse: null };
+    }
+  }
+  newMeal.sessionId = session.id;
+  const updatedMeals = [newMeal, ...meals].map(m => session.mealIds.includes(m.id) ? { ...m, sessionId: session.id } : m);
+  const updatedSessions = [...sessions.filter(s => s.id !== session.id), session];
+  await Promise.all([saveMealsRaw(updatedMeals), saveSessionsRaw(updatedSessions)]);
+  return newMeal;
+}
+
+// ---------------------------------------------------------------------------
+// V2 implementations — Phase H integration (Sections 2, 3, 4, 7.1)
+// ---------------------------------------------------------------------------
+
+/** Helper: apply SessionMutations to meals and sessions arrays in-place. */
+function applySessionMutations(
+  meals: Meal[],
+  sessions: Session[],
+  mutations: SessionMutations,
+): void {
+  // Update meal sessionIds
+  for (const update of mutations.mealUpdates) {
+    const meal = meals.find(m => m.id === update.mealId);
+    if (meal) meal.sessionId = update.newSessionId;
+  }
+
+  // Dissolve sessions
+  for (const sid of mutations.sessionsToDissolve) {
+    const idx = sessions.findIndex(s => s.id === sid);
+    if (idx >= 0) sessions.splice(idx, 1);
+  }
+
+  // Create new sessions
+  for (const newSess of mutations.sessionsToCreate) {
+    sessions.push({
+      id: newSess.id,
+      mealIds: newSess.mealIds,
+      startedAt: newSess.startedAt,
+      confidence: computeConfidence(newSess.mealIds.length),
+      glucoseResponse: null,
+      sessionEnd: newSess.sessionEnd,
+      totalCarbs: null,
+      totalInsulin: null,
+    });
+  }
+
+  // Update session ends
+  for (const endUpdate of mutations.sessionEndUpdates ?? []) {
+    const sess = sessions.find(s => s.id === endUpdate.sessionId);
+    if (sess) sess.sessionEnd = endUpdate.newSessionEnd;
+  }
+
+  // Recompute session aggregates for affected sessions
+  const affectedSessionIds = new Set([
+    ...mutations.sessionsToCreate.map(s => s.id),
+    ...(mutations.sessionEndUpdates ?? []).map(u => u.sessionId),
+  ]);
+  for (const sid of affectedSessionIds) {
+    const sess = sessions.find(s => s.id === sid);
+    if (!sess) continue;
+    const memberMeals = meals.filter(m => m.sessionId === sid);
+    sess.mealIds = memberMeals.map(m => m.id);
+    sess.totalCarbs = memberMeals.reduce((sum, m) => sum + (m.carbsEstimated ?? 0), 0);
+    sess.totalInsulin = memberMeals.reduce((sum, m) => sum + m.insulinUnits, 0);
+  }
+}
+
+/** Convert a Meal to the OverlapMeal interface needed by sessionGrouping.ts */
+function toOverlapMeal(m: Meal): OverlapMeal {
+  return {
+    id: m.id,
+    loggedAt: m.loggedAt,
+    digestionWindowMinutes: m.digestionWindowMinutes ?? null,
+    sessionId: m.sessionId,
+  };
+}
+
+async function _saveMealV2(
+  meal: Omit<Meal, 'id' | 'loggedAt' | 'glucoseResponse' | 'sessionId'>,
+  loggedAt?: Date
+): Promise<Meal> {
+  const now = loggedAt ?? new Date();
+  // Note: timestamp validation already done in public saveMeal() before try-catch
+
+  // Section 2: classify the meal
+  const classification = classifyMeal(meal.name, meal.carbsEstimated ?? null);
+  const matchingKey = computeMatchingKey(meal.name);
+  const dict = loadKeywordDictionary();
+
+  const [meals, sessions] = await Promise.all([loadMealsRaw(), loadSessionsRaw()]);
+
+  const newMeal: Meal = {
+    ...meal,
+    id: generateId(),
+    loggedAt: now.toISOString(),
+    glucoseResponse: null,
+    sessionId: null,
+    // V2 classification fields
+    classificationBucket: classification.bucket,
+    classificationMethod: classification.method,
+    classificationMatchedKeyword: classification.matchedKeyword,
+    classificationKeywordsVersion: classification.keywordsVersion,
+    digestionWindowMinutes: classification.digestionWindowMinutes,
+    matchingKey,
+    matchingKeyVersion: MATCHING_KEY_VERSION,
+    classificationSnapshot: classification.bucket,
+    overlapDetectedAtLog: null,
+  };
+
+  // Section 2: non_carb meals are excluded from session grouping
+  if (classification.bucket === 'non_carb') {
+    const updatedMeals = [newMeal, ...meals];
+    await saveMealsRaw(updatedMeals);
+    return newMeal;
+  }
+
+  // Section 3: detect overlaps using primary window rule
+  // Only consider classified meals (with digestionWindowMinutes) that are within a reasonable window
+  const maxWindowMs = 240 * 60 * 1000; // fat_heavy max — no meal outside this can overlap
+  const candidateMeals = meals.filter(m => {
+    if (!m.digestionWindowMinutes || m.digestionWindowMinutes === 0) return false;
+    if (m.classificationBucket === 'non_carb') return false;
+    const elapsed = now.getTime() - new Date(m.loggedAt).getTime();
+    return elapsed >= 0 && elapsed <= maxWindowMs;
+  });
+
+  const overlaps = detectOverlaps(toOverlapMeal(newMeal), candidateMeals.map(toOverlapMeal));
+
+  // Store overlap audit trail (Section 3 — overlap_detected_at_log)
+  newMeal.overlapDetectedAtLog = overlaps.map(o => o.id);
+
+  // Section 3 + 4: group or create session
+  const mutations = groupOrCreateSession(
+    toOverlapMeal(newMeal),
+    overlaps,
+    sessions,
+  );
+
+  // Apply mutations to local arrays
+  const allMeals = [newMeal, ...meals];
+  const allSessions = [...sessions];
+  applySessionMutations(allMeals, allSessions, mutations);
+
+  // If no mutations (solo meal) — newMeal.sessionId stays null
+  // Write audit events (Section 4.7)
+  if (mutations.auditEvents.length > 0) {
+    await logSessionEvents(mutations.auditEvents, {
+      beforeState: null,
+      afterState: null,
+      classificationKeywordsVersion: dict.version,
+    });
+  }
+
+  // Write atomically
+  await Promise.all([saveMealsRaw(allMeals), saveSessionsRaw(allSessions)]);
+
+  return newMeal;
+}
+
+async function _updateMealV2(
+  id: string,
+  changes: Partial<Pick<Meal, 'name' | 'photoUri' | 'insulinUnits' | 'loggedAt' | 'carbsEstimated'>>
+): Promise<void> {
+  const [meals, sessions] = await Promise.all([loadMealsRaw(), loadSessionsRaw()]);
+  const meal = meals.find(m => m.id === id);
+  if (!meal) return;
+
+  const nameChanged = 'name' in changes && changes.name !== meal.name;
+  const timeChanged = 'loggedAt' in changes && changes.loggedAt !== meal.loggedAt;
+  const carbsChanged = 'carbsEstimated' in changes && changes.carbsEstimated !== meal.carbsEstimated;
+
+  // Apply basic changes
+  const patch: Partial<Meal> = { ...changes };
+  if (timeChanged) patch.glucoseResponse = null;
+
+  // Re-classify if name or carbs changed (Section 4.4)
+  if (nameChanged || carbsChanged) {
+    const newName = (changes.name ?? meal.name);
+    const newCarbs = ('carbsEstimated' in changes ? changes.carbsEstimated : meal.carbsEstimated) ?? null;
+    const classification = classifyMeal(newName, newCarbs);
+    patch.classificationBucket = classification.bucket;
+    patch.classificationMethod = classification.method;
+    patch.classificationMatchedKeyword = classification.matchedKeyword;
+    patch.classificationKeywordsVersion = classification.keywordsVersion;
+    patch.digestionWindowMinutes = classification.digestionWindowMinutes;
+    patch.matchingKey = computeMatchingKey(newName);
+  }
+
+  // Apply patch to meal
+  const updatedMeal = { ...meal, ...patch };
+  const updatedMeals = meals.map(m => m.id === id ? updatedMeal : m);
+
+  // Re-evaluate sessions if name/time/carbs changed (Section 4.4)
+  if (nameChanged || timeChanged || carbsChanged) {
+    const overlapMeals = updatedMeals.filter(m =>
+      m.digestionWindowMinutes && m.digestionWindowMinutes > 0 && m.classificationBucket !== 'non_carb'
+    ).map(toOverlapMeal);
+    const mutations = reEvaluateOnEdit(id, overlapMeals, sessions);
+
+    const allSessions = [...sessions];
+    applySessionMutations(updatedMeals, allSessions, mutations);
+
+    if (mutations.auditEvents.length > 0) {
+      const dict = loadKeywordDictionary();
+      await logSessionEvents(mutations.auditEvents, {
+        beforeState: null,
+        afterState: null,
+        classificationKeywordsVersion: dict.version,
+      });
+    }
+
+    await Promise.all([saveMealsRaw(updatedMeals), saveSessionsRaw(allSessions)]);
+  } else {
+    await saveMealsRaw(updatedMeals);
+  }
+}
+
+async function _deleteMealV2(id: string): Promise<void> {
+  const [meals, sessions] = await Promise.all([loadMealsRaw(), loadSessionsRaw()]);
+  const meal = meals.find(m => m.id === id);
+  const remainingMeals = meals.filter(m => m.id !== id);
+
+  if (meal?.sessionId) {
+    // Re-evaluate sessions after deletion (Section 4.4)
+    const overlapMeals = remainingMeals.filter(m =>
+      m.digestionWindowMinutes && m.digestionWindowMinutes > 0 && m.classificationBucket !== 'non_carb'
+    ).map(toOverlapMeal);
+    const mutations = reEvaluateOnDelete(id, overlapMeals, sessions);
+
+    const allSessions = [...sessions];
+    applySessionMutations(remainingMeals, allSessions, mutations);
+
+    if (mutations.auditEvents.length > 0) {
+      const dict = loadKeywordDictionary();
+      await logSessionEvents(mutations.auditEvents, {
+        beforeState: null,
+        afterState: null,
+        classificationKeywordsVersion: dict.version,
+      });
+    }
+
+    await Promise.all([saveMealsRaw(remainingMeals), saveSessionsRaw(allSessions)]);
+  } else {
+    await saveMealsRaw(remainingMeals);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API — delegates to V1 or V2 based on feature flag
+// ---------------------------------------------------------------------------
+
+export async function updateMeal(
+  id: string,
+  changes: Partial<Pick<Meal, 'name' | 'photoUri' | 'insulinUnits' | 'loggedAt' | 'carbsEstimated'>>
+): Promise<void> {
+  if (!USE_V2_SESSION_GROUPING) return _updateMealV1(id, changes);
+  try {
+    return await _updateMealV2(id, changes);
+  } catch (err) {
+    console.warn('[storage] updateMealV2 failed, falling back to V1', err);
+    return _updateMealV1(id, changes);
+  }
 }
 
 export async function updateInsulinLog(
@@ -404,8 +737,13 @@ export async function updateInsulinLog(
 }
 
 export async function deleteMeal(id: string): Promise<void> {
-  const meals = await loadMealsRaw();
-  await saveMealsRaw(meals.filter(m => m.id !== id));
+  if (!USE_V2_SESSION_GROUPING) return _deleteMealV1(id);
+  try {
+    return await _deleteMealV2(id);
+  } catch (err) {
+    console.warn('[storage] deleteMealV2 failed, falling back to V1', err);
+    return _deleteMealV1(id);
+  }
 }
 
 export async function deleteInsulinLog(id: string): Promise<void> {
@@ -417,92 +755,22 @@ export async function saveMeal(
   meal: Omit<Meal, 'id' | 'loggedAt' | 'glucoseResponse' | 'sessionId'>,
   loggedAt?: Date
 ): Promise<Meal> {
-  const [meals, sessions] = await Promise.all([loadMealsRaw(), loadSessionsRaw()]);
+  // Section 4.6: reject future timestamps >10min BEFORE try-catch
+  // so validation errors propagate to the caller instead of falling back to V1
   const now = loggedAt ?? new Date();
-
-  const newMeal: Meal = {
-    ...meal,
-    id: generateId(),
-    loggedAt: now.toISOString(),
-    glucoseResponse: null,
-    sessionId: null,
-  };
-
-  // Sessions that started within the last 3 hours are still "open".
-  // elapsed must be >= 0: backdated entries must not attach to sessions that
-  // started AFTER the backdated time (negative elapsed would otherwise pass <= check).
-  const activeSessions = new Set(
-    sessions
-      .filter(s => {
-        const elapsed = now.getTime() - new Date(s.startedAt).getTime();
-        return elapsed >= 0 && elapsed <= THREE_HOURS_MS;
-      })
-      .map(s => s.id)
-  );
-
-  // Only consider meals that are recent AND belong to an open session (or no session yet).
-  // elapsed >= 0 guard mirrors the activeSessions fix — a backdated `now` must not
-  // treat future meals as "recent".
-  const recentMeals = meals.filter(m => {
-    const elapsed = now.getTime() - new Date(m.loggedAt).getTime();
-    const withinWindow = elapsed >= 0 && elapsed <= THREE_HOURS_MS;
-    const sessionOpen = m.sessionId === null || activeSessions.has(m.sessionId);
-    return withinWindow && sessionOpen;
-  });
-
-  let session: Session;
-
-  if (recentMeals.length === 0) {
-    // Solo — new high-confidence session
-    session = {
-      id: `s_${now.getTime()}`,
-      mealIds: [newMeal.id],
-      startedAt: newMeal.loggedAt,
-      confidence: 'high',
-      glucoseResponse: null,
-    };
-  } else {
-    // Find if any eligible recent meal already belongs to an open session
-    const existingSessionId = recentMeals.find(m => m.sessionId)?.sessionId ?? null;
-
-    if (existingSessionId) {
-      // Add to existing open session
-      const existing = sessions.find(s => s.id === existingSessionId)!;
-      const updatedIds = [...existing.mealIds, newMeal.id];
-      session = {
-        ...existing,
-        mealIds: updatedIds,
-        confidence: computeConfidence(updatedIds.length),
-      };
-    } else {
-      // No session yet — group eligible recent meals + this one into a new session
-      const allIds = [...recentMeals.map(m => m.id), newMeal.id];
-      const earliestStart = recentMeals.reduce(
-        (earliest, m) => (m.loggedAt < earliest ? m.loggedAt : earliest),
-        recentMeals[0].loggedAt
-      );
-      session = {
-        id: `s_${now.getTime()}`,
-        mealIds: allIds,
-        startedAt: earliestStart,
-        confidence: computeConfidence(allIds.length),
-        glucoseResponse: null,
-      };
-    }
+  const validation = validateMealTimestamp(now);
+  if (!validation.valid) {
+    throw new Error(validation.error ?? 'Invalid meal timestamp');
   }
 
-  newMeal.sessionId = session.id;
-
-  // Write sessionId onto every meal that belongs to this session
-  const updatedMeals = [newMeal, ...meals].map(m =>
-    session.mealIds.includes(m.id) ? { ...m, sessionId: session.id } : m
-  );
-
-  const updatedSessions = [...sessions.filter(s => s.id !== session.id), session];
-
-  await Promise.all([saveMealsRaw(updatedMeals), saveSessionsRaw(updatedSessions)]);
-
-  return newMeal;
+  if (!USE_V2_SESSION_GROUPING) return _saveMealV1(meal, loggedAt);
+  try {
+    return await _saveMealV2(meal, loggedAt);
+  } catch (err) {
+    // Layer 3 safety: if V2 fails, fall back to V1 so meal is never lost
+    console.warn('[storage] saveMealV2 failed, falling back to V1', err);
+    return _saveMealV1(meal, loggedAt);
+  }
 }
 
 // Load sessions with their meals populated, newest-first.
@@ -549,7 +817,8 @@ export async function loadSessionsWithMeals(): Promise<SessionWithMeals[]> {
 function buildGlucoseResponse(
   fromMs: number,
   readings: CurvePoint[],
-  nowMs: number
+  nowMs: number,
+  windowMs: number = THREE_HOURS_MS
 ): GlucoseResponse {
   const startGlucose = readings[0].mmol;
   const peak = readings.reduce((best, r) => (r.mmol > best.mmol ? r : best), readings[0]);
@@ -563,7 +832,7 @@ function buildGlucoseResponse(
     fallFromPeak: Math.round((peak.mmol - endReading.mmol) * 10) / 10,
     timeFromPeakToEndMins: Math.round((endReading.date - peak.date) / 60000),
     readings,
-    isPartial: nowMs < (fromMs + THREE_HOURS_MS),
+    isPartial: nowMs < (fromMs + windowMs),
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -576,13 +845,14 @@ export async function fetchAndStoreCurveForMeal(mealId: string): Promise<void> {
   if (!meal) return;
 
   const fromMs = new Date(meal.loggedAt).getTime();
-  const toMs = fromMs + THREE_HOURS_MS;
+  const windowMs = (meal.digestionWindowMinutes ?? 180) * 60 * 1000;
+  const toMs = fromMs + windowMs;
   const nowMs = Date.now();
 
   const readings = await fetchGlucoseRange(fromMs, Math.min(toMs, nowMs));
   if (readings.length === 0) return;
 
-  const glucoseResponse = buildGlucoseResponse(fromMs, readings, nowMs);
+  const glucoseResponse = buildGlucoseResponse(fromMs, readings, nowMs, windowMs);
 
   const updated = meals.map(m => (m.id === mealId ? { ...m, glucoseResponse } : m));
   await saveMealsRaw(updated);
