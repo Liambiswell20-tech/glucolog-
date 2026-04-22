@@ -1,3 +1,11 @@
+/**
+ * @deprecated Phase G: Use patternMatching.ts (findSoloPatterns, findSessionPatterns, findPatterns)
+ * instead. This file uses getMealFingerprint() which strips too many stop words (Section 7.1).
+ * The spec-compliant matching_key is computed by computeMatchingKey() in classification.ts
+ * and stored on each meal at save time.
+ *
+ * This file is retained for backward compatibility with MealBottomSheet until Phase K.
+ */
 import levenshtein from 'fast-levenshtein';
 import { getMealFingerprint } from '../utils/mealFingerprint';
 import { SessionWithMeals } from './storage';
