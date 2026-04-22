@@ -47,6 +47,11 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.
 - `GlucoseResponse` fields: startGlucose, peakGlucose, timeToPeakMins, totalRise, endGlucose, fallFromPeak, timeFromPeakToEndMins, readings, isPartial, fetchedAt
 
 ## Current Build Phase
+- **Phase 11 (Supabase Migration): COMPLETE** (2026-04-17) — auth, biometric, migration, rate limit, consent, help copy all verified on real device
+- **Session Grouping Phase A (Schema): COMPLETE** (2026-04-22) — types, classification-keywords.json, Supabase migration SQL
+- **Session Grouping Phase B (Classification Engine): COMPLETE** (2026-04-22) — classifyMeal(), computeMatchingKey(), loadKeywordDictionary() in src/services/classification.ts. 31 tests.
+- **Next: Session Grouping Phase C** — Overlap Detection + Session Lifecycle Logic
+- Authoritative spec: [Session Grouping Design Spec (Notion)](https://www.notion.so/34451b52df6e811abfcbd385555158d8)
 - GSD project initialized — see `.planning/` for roadmap and requirements
 - Do NOT build prediction engine until 50+ meals logged
 
