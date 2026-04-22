@@ -53,7 +53,8 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.
 - **Session Grouping Phase C (Overlap Detection + Session Lifecycle): COMPLETE** (2026-04-22) — detectOverlaps(), groupOrCreateSession(), reEvaluateOnEdit(), reEvaluateOnDelete(), computeSessionEnd(), isSessionClosed() in src/services/sessionGrouping.ts. 22 tests.
 - **Session Grouping Phase D (Audit Trail): COMPLETE** (2026-04-22) — logSessionEvent(), logSessionEvents(), getSessionEvents(), getAllSessionEvents() in src/services/sessionEventLog.ts. Append-only AsyncStorage log. 21 tests.
 - **Session Grouping Phase E (Non-Meal Event Interactions): COMPLETE** (2026-04-22) — handleCorrectionDose(), handleHypoTreatment(), handleContextEvent(), findActiveSessionAtTimestamp() in src/services/nonMealInteractions.ts. Pure functions, no storage writes. 23 tests.
-- **Next: Session Grouping Phase F** — Confidence Scoring + CGM Coverage
+- **Session Grouping Phase F (Confidence Scoring + CGM Coverage): COMPLETE** (2026-04-22) — computeMealConfidence(), computeSessionConfidence(), computeCgmCoverage(), computeEndedElevated(), computeEndedLow(), computeReturnToBaselineMinutes() in src/services/confidenceScoring.ts. Pure functions, no storage writes. 47 tests.
+- **Next: Session Grouping Phase G** — Pattern Matching + matching_key Overhaul
 - Authoritative spec: [Session Grouping Design Spec (Notion)](https://www.notion.so/34451b52df6e811abfcbd385555158d8)
 - GSD project initialized — see `.planning/` for roadmap and requirements
 - Do NOT build prediction engine until 50+ meals logged
