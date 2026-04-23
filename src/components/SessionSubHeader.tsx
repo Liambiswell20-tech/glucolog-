@@ -41,7 +41,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginBottom: 4,
+    marginTop: 4,
+    marginBottom: -8,
     gap: 8,
   },
   accentBar: {
