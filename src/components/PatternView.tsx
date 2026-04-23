@@ -3,6 +3,7 @@
  *
  * Clean, readable pattern history for a meal being logged.
  * Shows each past instance as its own row — no grouped averages.
+ * Tap a row to expand inline showing glucose chart + full stats.
  *
  * Priority: solo meals first. Session meals shown only when
  * no solo matches exist ("Eaten with other foods").
@@ -20,6 +21,8 @@ import type {
   PatternDisplayMode,
 } from '../services/patternMatching';
 import { OutcomeBadge } from './OutcomeBadge';
+import { GlucoseChart } from './GlucoseChart';
+import { glucoseColor } from '../utils/glucoseColor';
 import { COLORS, FONTS } from '../theme';
 
 // ---------------------------------------------------------------------------
@@ -90,6 +93,7 @@ interface PatternViewProps {
 
 export function PatternView({ result, onInstanceTap }: PatternViewProps) {
   const [showSummaryInfo, setShowSummaryInfo] = useState(false);
+  const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
 
   if (!result) return null;
 
@@ -113,6 +117,14 @@ export function PatternView({ result, onInstanceTap }: PatternViewProps) {
   // Show session section only when there are no solo instances
   const showSession = session && solo.instances.length === 0;
 
+  function handleRowTap(instance: PatternInstance) {
+    // Toggle expand/collapse
+    setExpandedMealId(prev =>
+      prev === instance.mealId ? null : instance.mealId,
+    );
+    onInstanceTap?.(instance.mealId);
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -120,13 +132,20 @@ export function PatternView({ result, onInstanceTap }: PatternViewProps) {
 
       {/* Instance rows — one per past meal, newest first */}
       {solo.instances.map((instance, index) => (
-        <Pressable
-          key={instance.mealId}
-          style={[styles.instanceRow, index > 0 && styles.instanceDivider]}
-          onPress={() => onInstanceTap?.(instance.mealId)}
-        >
-          <InstanceRow instance={instance} />
-        </Pressable>
+        <View key={instance.mealId}>
+          <Pressable
+            style={[styles.instanceRow, index > 0 && styles.instanceDivider]}
+            onPress={() => handleRowTap(instance)}
+          >
+            <InstanceRow
+              instance={instance}
+              isExpanded={expandedMealId === instance.mealId}
+            />
+          </Pressable>
+          {expandedMealId === instance.mealId && (
+            <InstanceDetail instance={instance} />
+          )}
+        </View>
       ))}
 
       {/* Session section — only when no solo matches */}
@@ -184,7 +203,13 @@ export function PatternView({ result, onInstanceTap }: PatternViewProps) {
 // Instance row — clean, one meal per row
 // ---------------------------------------------------------------------------
 
-function InstanceRow({ instance }: { instance: PatternInstance }) {
+function InstanceRow({
+  instance,
+  isExpanded,
+}: {
+  instance: PatternInstance;
+  isExpanded: boolean;
+}) {
   const dateStr = new Date(instance.date).toLocaleDateString('en-GB', {
     weekday: 'short',
     day: 'numeric',
@@ -194,9 +219,12 @@ function InstanceRow({ instance }: { instance: PatternInstance }) {
   return (
     <View style={styles.rowContent}>
       {/* Meal name — large and clear */}
-      <Text style={styles.rowName} numberOfLines={1}>
-        {instance.mealName}
-      </Text>
+      <View style={styles.rowNameLine}>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {instance.mealName}
+        </Text>
+        <Text style={styles.chevron}>{isExpanded ? '\u25B2' : '\u25BC'}</Text>
+      </View>
 
       {/* Stats line — date, dose, carbs, peak */}
       <View style={styles.rowStats}>
@@ -206,7 +234,12 @@ function InstanceRow({ instance }: { instance: PatternInstance }) {
         {instance.carbs != null && (
           <>
             <Text style={styles.rowDot}>{'\u00B7'}</Text>
-            <Text style={styles.rowStat}>{instance.carbs}g</Text>
+            <Text style={styles.rowStat}>
+              {instance.carbs}g
+              {instance.isAiEstimate && (
+                <Text style={styles.aiLabel}> AI est.</Text>
+              )}
+            </Text>
           </>
         )}
         {instance.peakGlucose != null && (
@@ -219,10 +252,85 @@ function InstanceRow({ instance }: { instance: PatternInstance }) {
         )}
       </View>
 
-      {/* Outcome badge */}
+      {/* Outcome badge + session tag */}
       <View style={styles.rowBadge}>
         <OutcomeBadge badge={instance.outcome} size="small" />
+        {instance.isSessionMember && instance.sessionMealCount != null && (
+          <View style={styles.sessionTag}>
+            <Text style={styles.sessionTagText}>
+              Session ({instance.sessionMealCount} meals)
+            </Text>
+          </View>
+        )}
       </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Instance detail — expanded view with glucose chart
+// ---------------------------------------------------------------------------
+
+function InstanceDetail({ instance }: { instance: PatternInstance }) {
+  const gr = instance.glucoseResponse;
+
+  if (!gr) {
+    return (
+      <View style={styles.detailContainer}>
+        <Text style={styles.detailNoData}>No glucose curve available</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.detailContainer}>
+      {/* Stats row: start, peak, 3hr */}
+      <View style={styles.detailStats}>
+        <View style={styles.detailStat}>
+          <Text style={styles.detailStatLabel}>START</Text>
+          <Text
+            style={[
+              styles.detailStatValue,
+              { color: glucoseColor(gr.startGlucose) },
+            ]}
+          >
+            {gr.startGlucose.toFixed(1)}
+          </Text>
+        </View>
+        <View style={styles.detailStat}>
+          <Text style={styles.detailStatLabel}>PEAK</Text>
+          <Text
+            style={[
+              styles.detailStatValue,
+              { color: glucoseColor(gr.peakGlucose) },
+            ]}
+          >
+            {gr.peakGlucose.toFixed(1)}
+          </Text>
+        </View>
+        <View style={styles.detailStat}>
+          <Text style={styles.detailStatLabel}>3HR</Text>
+          <Text
+            style={[
+              styles.detailStatValue,
+              { color: glucoseColor(gr.endGlucose) },
+            ]}
+          >
+            {gr.endGlucose.toFixed(1)}
+          </Text>
+        </View>
+        {gr.timeToPeakMins != null && (
+          <View style={styles.detailStat}>
+            <Text style={styles.detailStatLabel}>TIME TO PEAK</Text>
+            <Text style={styles.detailStatValue}>{gr.timeToPeakMins}m</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Glucose chart */}
+      {gr.readings.length >= 2 && (
+        <GlucoseChart response={gr} height={120} />
+      )}
     </View>
   );
 }
@@ -307,17 +415,29 @@ const styles = StyleSheet.create({
   rowContent: {
     gap: 4,
   },
+  rowNameLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   rowName: {
     fontSize: 16,
     color: '#FFFFFF',
     fontFamily: FONTS.semiBold,
     fontWeight: '600',
+    flex: 1,
+  },
+  chevron: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginLeft: 8,
   },
   rowStats: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 2,
+    flexWrap: 'wrap',
   },
   rowDate: {
     fontSize: 14,
@@ -333,11 +453,65 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontFamily: FONTS.regular,
   },
+  aiLabel: {
+    fontSize: 11,
+    color: '#0A84FF',
+    fontFamily: FONTS.regular,
+  },
   rowBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+    gap: 8,
   },
+  sessionTag: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sessionTagText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.regular,
+  },
+  // Detail expanded view
+  detailContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  detailNoData: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  detailStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#2C2C2E',
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  detailStat: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  detailStatLabel: {
+    fontSize: 10,
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  detailStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  // Session section
   sessionSection: {
     borderTopWidth: 1,
     borderTopColor: COLORS.separator,
@@ -350,6 +524,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 6,
   },
+  // Info modal
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',

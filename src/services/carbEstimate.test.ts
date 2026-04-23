@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getRemainingEstimates, estimateCarbsFromPhoto, RateLimitError, ConsentRequiredError } from './carbEstimate';
+import { getRemainingEstimates, estimateCarbsFromPhoto, parseEstimateResponse, RateLimitError, ConsentRequiredError } from './carbEstimate';
 
 // Mock global fetch
 const mockFetch = jest.fn();
@@ -79,13 +79,24 @@ describe('getRemainingEstimates', () => {
 });
 
 describe('estimateCarbsFromPhoto', () => {
-  it('returns result text on success', async () => {
+  it('returns CarbEstimateResult on success', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ result: '45g\nChicken rice and vegetables\nBased on 200g rice...' }),
+    });
+    const result = await estimateCarbsFromPhoto('file:///photo.jpg');
+    expect(result.text).toContain('45g');
+    expect(result.mealDescription).toBe('Chicken rice and vegetables');
+  });
+
+  it('handles old format without description', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ result: '45g carbs' }),
     });
     const result = await estimateCarbsFromPhoto('file:///photo.jpg');
-    expect(result).toBe('45g carbs');
+    expect(result.text).toBe('45g carbs');
+    expect(result.mealDescription).toBeNull();
   });
 
   it('throws RateLimitError when daily limit is reached', async () => {
@@ -109,5 +120,35 @@ describe('estimateCarbsFromPhoto', () => {
   it('throws ConsentRequiredError when AI consent is missing', async () => {
     mockConsentMissing();
     await expect(estimateCarbsFromPhoto('file:///photo.jpg')).rejects.toBeInstanceOf(ConsentRequiredError);
+  });
+});
+
+describe('parseEstimateResponse', () => {
+  it('parses 3-line format: carbs, description, reasoning', () => {
+    const result = parseEstimateResponse('45g\nChicken rice and vegetables\nBased on 200g of rice...');
+    expect(result.text).toBe('45g\nBased on 200g of rice...');
+    expect(result.mealDescription).toBe('Chicken rice and vegetables');
+  });
+
+  it('parses range format', () => {
+    const result = parseEstimateResponse('40-50g\nToast with peanut butter\nTwo slices of wholemeal...');
+    expect(result.text).toBe('40-50g\nTwo slices of wholemeal...');
+    expect(result.mealDescription).toBe('Toast with peanut butter');
+  });
+
+  it('returns null description for single-line response', () => {
+    const result = parseEstimateResponse('No food visible in this image.');
+    expect(result.text).toBe('No food visible in this image.');
+    expect(result.mealDescription).toBeNull();
+  });
+
+  it('returns null description for old format (no meal name line)', () => {
+    const result = parseEstimateResponse('45g carbs from a plate of pasta');
+    expect(result.mealDescription).toBeNull();
+  });
+
+  it('rejects line 2 that looks like a carb figure', () => {
+    const result = parseEstimateResponse('45g\n30g sugars\nSome reasoning');
+    expect(result.mealDescription).toBeNull();
   });
 });

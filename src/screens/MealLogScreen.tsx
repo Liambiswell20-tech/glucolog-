@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -69,6 +69,11 @@ export default function MealLogScreen() {
   const [sheetSessions, setSheetSessions] = useState<SessionWithMeals[]>([]);
   const [sheetVisible, setSheetVisible] = useState(false);
 
+  // Auto-scroll refs
+  const scrollRef = useRef<ScrollView>(null);
+  const patternViewRef = useRef<View>(null);
+  const patternViewY = useRef<number>(0);
+
   useEffect(() => {
     getRemainingEstimates().then(n => {
       setEstimatesLeft(n);
@@ -106,6 +111,12 @@ export default function MealLogScreen() {
           cache: patternCache,
         });
         setPatternResult(result);
+        // Auto-scroll to show pattern results while keyboard stays open
+        if (result && result.solo.displayMode !== 'empty') {
+          setTimeout(() => {
+            scrollRef.current?.scrollTo({ y: Math.max(0, patternViewY.current - 80), animated: true });
+          }, 100);
+        }
       } catch {
         setPatternResult(null);
       }
@@ -152,8 +163,12 @@ export default function MealLogScreen() {
     setEstimating(true);
     setCarbEstimate(null);
     try {
-      const estimate = await estimateCarbsFromPhoto(photoUri);
-      setCarbEstimate(estimate);
+      const result = await estimateCarbsFromPhoto(photoUri);
+      setCarbEstimate(result.text);
+      // Auto-fill meal name from AI description if user hasn't typed one yet
+      if (result.mealDescription && !mealName.trim()) {
+        setMealName(result.mealDescription);
+      }
       const remaining = await getRemainingEstimates();
       setEstimatesLeft(remaining);
       if (remaining <= 0) setRateLimitHit(true);
@@ -251,7 +266,7 @@ export default function MealLogScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
         {/* Photo section — unchanged */}
         <Pressable style={styles.photoArea} onPress={handleCamera}>
@@ -327,7 +342,12 @@ export default function MealLogScreen() {
         />
 
         {/* Pattern view — Phase K (Section 8.4) */}
-        <PatternView result={patternResult} />
+        <View
+          ref={patternViewRef}
+          onLayout={(e) => { patternViewY.current = e.nativeEvent.layout.y; }}
+        >
+          <PatternView result={patternResult} />
+        </View>
 
         {/* Insulin units */}
         <View style={styles.insulinLabelRow}>

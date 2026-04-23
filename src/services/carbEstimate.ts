@@ -67,7 +67,52 @@ export async function hasAIConsent(): Promise<boolean> {
   }
 }
 
-export async function estimateCarbsFromPhoto(photoUri: string, signal?: AbortSignal): Promise<string> {
+export interface CarbEstimateResult {
+  /** Full AI response text (carbs + reasoning) */
+  text: string;
+  /** Short meal description extracted from AI response (e.g. "chicken rice and vegetables") */
+  mealDescription: string | null;
+}
+
+/**
+ * Parse the AI response into carbs text and meal description.
+ * Expected format:
+ *   Line 1: "45g" or "40-50g"
+ *   Line 2: "Chicken rice and vegetables"
+ *   Line 3: "Based on approximately 200g of rice..."
+ *
+ * Falls back gracefully if the AI doesn't follow the format.
+ */
+export function parseEstimateResponse(raw: string): CarbEstimateResult {
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  if (lines.length < 2) {
+    // Old format or no-food response — no description available
+    return { text: raw, mealDescription: null };
+  }
+
+  // Line 1 should contain the carb figure (contains 'g')
+  // Line 2 should be the meal description (no 'g' number pattern)
+  const carbLine = lines[0];
+  const descLine = lines[1];
+
+  // Validate: line 2 looks like a meal description (not a number/carb figure)
+  const looksLikeCarbs = /^\d/.test(descLine) && descLine.includes('g');
+  if (looksLikeCarbs) {
+    // AI didn't follow the format — treat entire response as text, no description
+    return { text: raw, mealDescription: null };
+  }
+
+  // Build display text: carb line + reasoning (skip the description line)
+  const displayLines = [carbLine, ...lines.slice(2)];
+
+  return {
+    text: displayLines.join('\n'),
+    mealDescription: descLine,
+  };
+}
+
+export async function estimateCarbsFromPhoto(photoUri: string, signal?: AbortSignal): Promise<CarbEstimateResult> {
   // Check AI consent first
   const consented = await hasAIConsent();
   if (!consented) throw new ConsentRequiredError();
@@ -102,5 +147,5 @@ export async function estimateCarbsFromPhoto(photoUri: string, signal?: AbortSig
   // Only count successful estimates against the limit
   await incrementUsage();
 
-  return text;
+  return parseEstimateResponse(text);
 }

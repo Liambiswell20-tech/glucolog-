@@ -50,11 +50,15 @@ function makeInstance(overrides: Partial<PatternInstance> = {}): PatternInstance
     date: '2026-04-20T12:00:00Z',
     insulinUnits: 4,
     carbs: 30,
+    isAiEstimate: true,
     peakGlucose: 9.2,
     timeToPeakMins: 45,
     outcome: 'GREEN',
     confidence: 'high',
     isMuted: false,
+    isSessionMember: false,
+    sessionMealCount: null,
+    glucoseResponse: null,
     ...overrides,
   };
 }

@@ -41,12 +41,20 @@ export interface PatternInstance {
   date: string;
   insulinUnits: number;
   carbs: number | null;
+  /** true when carbs came from AI estimation (carbsEstimated field) */
+  isAiEstimate: boolean;
   peakGlucose: number | null;
   timeToPeakMins: number | null;
   outcome: OutcomeBadge;
   confidence: SessionConfidence;
   /** true for MEDIUM-confidence meals — visually de-emphasised (Section 8.5) */
   isMuted: boolean;
+  /** true when this meal was part of a session group */
+  isSessionMember: boolean;
+  /** Number of meals in the session (only set when isSessionMember is true) */
+  sessionMealCount: number | null;
+  /** Glucose response for detail view */
+  glucoseResponse: import('./storage').GlucoseResponse | null;
 }
 
 /** Summary stats for N ≥ 3 — Section 7.4 */
@@ -109,11 +117,11 @@ function resolveMealKey(meal: Meal): string | null {
   return meal.matchingKey ?? (computeMatchingKey(meal.name) || null);
 }
 
-/** Check if a meal's key matches the query — exact match or prefix match */
+/** Check if a meal's key matches the query — exact, prefix, or partial-word match (typeahead) */
 function keyMatches(meal: Meal, queryKey: string): boolean {
   const mealKey = resolveMealKey(meal);
   if (!mealKey) return false;
-  return mealKey === queryKey || mealKey.startsWith(queryKey + ' ');
+  return mealKey === queryKey || mealKey.startsWith(queryKey);
 }
 
 /**
@@ -131,18 +139,26 @@ function soloMealConfidence(meal: Meal): SessionConfidence {
 }
 
 /** Convert a Meal + confidence into a PatternInstance for display */
-function mealToInstance(meal: Meal, confidence: SessionConfidence): PatternInstance {
+function mealToInstance(meal: Meal, confidence: SessionConfidence, allMeals: Meal[]): PatternInstance {
+  let sessionMealCount: number | null = null;
+  if (meal.sessionId) {
+    sessionMealCount = allMeals.filter(m => m.sessionId === meal.sessionId).length;
+  }
   return {
     mealId: meal.id,
     mealName: meal.name,
     date: meal.loggedAt,
     insulinUnits: meal.insulinUnits,
     carbs: meal.carbsEstimated,
+    isAiEstimate: meal.carbsEstimated != null,
     peakGlucose: meal.glucoseResponse?.peakGlucose ?? null,
     timeToPeakMins: meal.glucoseResponse?.timeToPeakMins ?? null,
     outcome: classifyOutcome(meal.glucoseResponse),
     confidence,
     isMuted: confidence === 'medium',
+    isSessionMember: meal.sessionId != null,
+    sessionMealCount,
+    glucoseResponse: meal.glucoseResponse ?? null,
   };
 }
 
@@ -236,7 +252,7 @@ export function findSoloPatterns(
 
   // Build instances (HIGH + MEDIUM, MEDIUM flagged as muted)
   const instances = eligible.map(({ meal, confidence }) =>
-    mealToInstance(meal, confidence),
+    mealToInstance(meal, confidence, allMeals),
   );
 
   // Section 8.4: cap at 10 in summary mode
