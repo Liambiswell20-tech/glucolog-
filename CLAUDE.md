@@ -41,9 +41,11 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.
 - Readings every 5 minutes
 
 ## Key Architecture Decisions
-- **Canonical curve location**: `Meal.glucoseResponse` — always use `fetchAndStoreCurveForMeal(mealId)` to fetch and store curves. The `_fetchCurveForSession` path (which saves to `Session.glucoseResponse`) is deprecated — it exists for backward compatibility only and must not be used for new features.
-- Sessions exist in storage for future pattern matching but are NOT displayed in history
-- Session grouping caps strictly at `session.startedAt + 3hrs` (no chain-reaction)
+- **Authoritative spec**: [Session Grouping Design Spec (Notion)](https://www.notion.so/34451b52df6e811abfcbd385555158d8) — supersedes the v1 session grouping sketch. All session grouping logic references this page.
+- **Canonical curve location**: `Meal.glucoseResponse` — always use `fetchAndStoreCurveForMeal(mealId)` to fetch and store curves.
+- **Session grouping V2**: 4-bucket classification (quick_sugar 60min / simple_snack 90min / mixed_meal 180min / fat_heavy 240min) with 75% primary window overlap detection. Sessions capped at `MAX(member.timestamp + member.digestion_window_minutes)`.
+- **Confidence scoring**: Rule-based HIGH/MEDIUM/LOW (Section 6), computed lazily at read time via `confidenceScoring.ts`. Not count-based.
+- **`matching_key`**: Stored on meal at save time. Canonical matching field — `getMealFingerprint()` is deprecated. Strip conjunctions only, preserve ingredient words.
 - `GlucoseResponse` fields: startGlucose, peakGlucose, timeToPeakMins, totalRise, endGlucose, fallFromPeak, timeFromPeakToEndMins, readings, isPartial, fetchedAt
 
 ## Current Build Phase
@@ -58,7 +60,9 @@ Full project brief: `C:\Users\Liamb\OneDrive\Desktop\Bolus Brain Project\CLAUDE.
 - **Session Grouping Phase H (Integration): COMPLETE** (2026-04-22) — V2 saveMeal/updateMeal/deleteMeal rewrite, V1 rollback layer, 20 integration tests. Commits `104a490`, `9d98007`.
 - **Session Grouping Phase I (Data Migration): COMPLETE** (2026-04-22) — migrateToSessionGroupingV2(), rollbackMigration() in src/services/sessionMigration.ts. Idempotent, pre-migration backup, audit trail. 20 tests. Commit `4f44660`.
 - **Session Grouping Phase J (UI — History Cards + Session-Level Row): COMPLETE** (2026-04-23) — getMealChips(), MealChipRow, ChipInfoSheet, SessionSubHeader V2, accent bar. 23 tests. Commit `b181d45`.
-- **Next: Session Grouping Phase K** — UI: Pattern View
+- **Session Grouping Phase K (UI — Pattern View): COMPLETE** (2026-04-23) — PatternView with expandable rows (glucose chart + stats), typeahead from 3 chars, session tag with meal count, AI est. label, auto-scroll, AI carb estimate auto-fills meal name for pattern recall. 446 tests. Commits `f9ae103`, `6ad0ee4`.
+- **Session Grouping Phase L (Home Footer + Cleanup): COMPLETE** (2026-04-23) — Home screen active digestion footer ("meal active: Xh Ym remaining"), removed deprecated `_fetchCurveForSession` and count-based `computeConfidence`, final copy audit. 458 tests.
+- **Session Grouping: ALL PHASES (A–L) COMPLETE** — spec fully implemented
 - Authoritative spec: [Session Grouping Design Spec (Notion)](https://www.notion.so/34451b52df6e811abfcbd385555158d8)
 - GSD project initialized — see `.planning/` for roadmap and requirements
 - Do NOT build prediction engine until 50+ meals logged

@@ -383,7 +383,9 @@ async function saveSessionsRaw(sessions: Session[]): Promise<void> {
   await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
 }
 
-function computeConfidence(mealCount: number): SessionConfidence {
+// V1 count-based confidence — only used by the V1 rollback path (_saveMealV1).
+// V2 computes confidence lazily at read time via confidenceScoring.ts (Section 6).
+function _v1CountBasedConfidence(mealCount: number): SessionConfidence {
   if (mealCount === 1) return 'high';
   if (mealCount === 2) return 'medium';
   return 'low';
@@ -459,11 +461,11 @@ async function _saveMealV1(
     if (existingSessionId) {
       const existing = sessions.find(s => s.id === existingSessionId)!;
       const updatedIds = [...existing.mealIds, newMeal.id];
-      session = { ...existing, mealIds: updatedIds, confidence: computeConfidence(updatedIds.length) };
+      session = { ...existing, mealIds: updatedIds, confidence: _v1CountBasedConfidence(updatedIds.length) };
     } else {
       const allIds = [...recentMeals.map(m => m.id), newMeal.id];
       const earliestStart = recentMeals.reduce((earliest, m) => (m.loggedAt < earliest ? m.loggedAt : earliest), recentMeals[0].loggedAt);
-      session = { id: `s_${now.getTime()}`, mealIds: allIds, startedAt: earliestStart, confidence: computeConfidence(allIds.length), glucoseResponse: null };
+      session = { id: `s_${now.getTime()}`, mealIds: allIds, startedAt: earliestStart, confidence: _v1CountBasedConfidence(allIds.length), glucoseResponse: null };
     }
   }
   newMeal.sessionId = session.id;
@@ -501,7 +503,7 @@ function applySessionMutations(
       id: newSess.id,
       mealIds: newSess.mealIds,
       startedAt: newSess.startedAt,
-      confidence: computeConfidence(newSess.mealIds.length),
+      confidence: 'high' as SessionConfidence, // V2: computed lazily at read time via confidenceScoring.ts
       glucoseResponse: null,
       sessionEnd: newSess.sessionEnd,
       totalCarbs: null,
@@ -813,7 +815,6 @@ export async function loadSessionsWithMeals(): Promise<SessionWithMeals[]> {
 }
 
 // Pure function — builds GlucoseResponse from a curve fetch result.
-// Called by both fetchAndStoreCurveForMeal and _fetchCurveForSession.
 function buildGlucoseResponse(
   fromMs: number,
   readings: CurvePoint[],
@@ -863,31 +864,6 @@ export async function fetchAndStoreCurve(mealId: string): Promise<void> {
   await fetchAndStoreCurveForMeal(mealId);
 }
 
-// Fetch the curve directly by session ID (used by the history screen refresh button).
-export async function fetchAndStoreCurveForSession(sessionId: string): Promise<void> {
-  const sessions = await loadSessionsRaw();
-  await _fetchCurveForSession(sessionId, sessions);
-}
-
-// DEPRECATED write path: this function saves glucoseResponse onto the Session object.
-// The canonical curve location is Meal.glucoseResponse — use fetchAndStoreCurveForMeal() instead.
-// This function is kept for call-site compatibility but should not be used for new features.
-async function _fetchCurveForSession(sessionId: string, sessions: Session[]): Promise<void> {
-  const session = sessions.find(s => s.id === sessionId);
-  if (!session) return;
-
-  const fromMs = new Date(session.startedAt).getTime();
-  const toMs = fromMs + THREE_HOURS_MS;
-  const nowMs = Date.now();
-
-  const readings = await fetchGlucoseRange(fromMs, Math.min(toMs, nowMs));
-  if (readings.length === 0) return;
-
-  const glucoseResponse = buildGlucoseResponse(fromMs, readings, nowMs);
-
-  const updated = sessions.map(s => (s.id === sessionId ? { ...s, glucoseResponse } : s));
-  await saveSessionsRaw(updated);
-}
 
 // --- hypo treatment helpers ---
 

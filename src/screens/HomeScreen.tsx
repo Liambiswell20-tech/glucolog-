@@ -19,7 +19,8 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { fetchLatestGlucose, fetchGlucosesSince, fetchGlucoseRange, trendArrow, GlucoseReading, CurvePoint } from '../services/nightscout';
-import { fetchAndStoreCurve, saveMeal, loadGlucoseStore, updateGlucoseStore, loadCachedHba1c, computeAndCacheHba1c, Hba1cEstimate, GlucoseResponse, fetchAndStoreHypoRecoveryCurve, saveHypoTreatment } from '../services/storage';
+import { fetchAndStoreCurve, saveMeal, loadGlucoseStore, updateGlucoseStore, loadCachedHba1c, computeAndCacheHba1c, Hba1cEstimate, GlucoseResponse, fetchAndStoreHypoRecoveryCurve, saveHypoTreatment, loadSessionsWithMeals } from '../services/storage';
+import { getActiveDigestionInfo, ActiveDigestionInfo } from '../services/activeDigestion';
 import { GlucoseChart } from '../components/GlucoseChart';
 import { glucoseToArcAngle } from '../utils/glucoseToArcAngle';
 import { COLORS, FONTS } from '../theme';
@@ -71,6 +72,9 @@ export default function HomeScreen() {
   // Hypo treatment sheet
   const [hypoSheetVisible, setHypoSheetVisible] = useState(false);
 
+  // Active digestion footer (Section 8.6)
+  const [activeDigestion, setActiveDigestion] = useState<ActiveDigestionInfo | null>(null);
+
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const cardAnims = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
@@ -93,6 +97,23 @@ export default function HomeScreen() {
       )).start();
     }
   }, [loading]);
+
+  // Refresh active digestion footer from local storage
+  const refreshDigestionFooter = useCallback(async () => {
+    try {
+      const sessionsWithMeals = await loadSessionsWithMeals();
+      const allMeals = sessionsWithMeals.flatMap(s => s.meals);
+      // Deduplicate meals (session meals appear in both session and solo wrappers)
+      const mealMap = new Map(allMeals.map(m => [m.id, m]));
+      const meals = Array.from(mealMap.values());
+      const sessions = sessionsWithMeals
+        .filter(s => !s.id.startsWith('legacy_'))
+        .map(({ meals: _, ...s }) => s);
+      setActiveDigestion(getActiveDigestionInfo(meals, sessions, new Date()));
+    } catch {
+      setActiveDigestion(null);
+    }
+  }, []);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -119,13 +140,16 @@ export default function HomeScreen() {
         const estimate = cached ?? await computeAndCacheHba1c(avg30d, daysOfData);
         setHba1c(estimate);
       }
+
+      // Refresh active digestion footer
+      await refreshDigestionFooter();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load glucose');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [refreshDigestionFooter]);
 
   // Poll only while app is in the foreground; re-fetch immediately on resume
   useEffect(() => {
@@ -146,6 +170,13 @@ export default function HomeScreen() {
       sub.remove();
     };
   }, [loadData]);
+
+  // Update active digestion countdown every 60s (Section 8.6)
+  useEffect(() => {
+    if (!activeDigestion) return;
+    const timer = setInterval(() => refreshDigestionFooter(), 60_000);
+    return () => clearInterval(timer);
+  }, [activeDigestion, refreshDigestionFooter]);
 
   function openQuickLog() {
     setSnackName('');
@@ -457,6 +488,13 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* Active digestion footer — Section 8.6 */}
+        {activeDigestion && (
+          <View style={styles.digestionFooter}>
+            <Text style={styles.digestionFooterText}>{activeDigestion.displayText}</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Quick log modal */}
@@ -787,6 +825,23 @@ const styles = StyleSheet.create({
   rangeCompactItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   rangeLabel: { fontSize: 12, color: COLORS.textSecondary, fontFamily: FONTS.regular },
+
+  // Active digestion footer — Section 8.6
+  digestionFooter: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  digestionFooterText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+    letterSpacing: 0.3,
+  },
 
   // Modal (shared backdrop)
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
