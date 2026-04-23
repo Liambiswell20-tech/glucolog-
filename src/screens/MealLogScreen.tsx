@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,7 +16,7 @@ import {
 } from 'react-native';
 import { Button } from '~/components/ui/button';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { fetchAndStoreCurve, loadSessionsWithMeals, saveMeal } from '../services/storage';
+import { fetchAndStoreCurve, loadMeals, loadSessionsWithMeals, saveMeal } from '../services/storage';
 import type { SessionWithMeals } from '../services/storage';
 import { fetchGlucoseRange, fetchLatestGlucose } from '../services/nightscout';
 import {
@@ -27,14 +26,11 @@ import {
   ConsentRequiredError,
 } from '../services/carbEstimate';
 import AIConsentModal from './AIConsentModal';
-import type { SessionMatch, MatchSummary } from '../services/matching';
-import { findSimilarSessions } from '../services/matching';
 import { getCurrentEquipmentProfile } from '../utils/equipmentProfile';
-import { getMealFingerprint } from '../utils/mealFingerprint';
-import { classifyOutcome } from '../utils/outcomeClassifier';
-import { glucoseColor } from '../utils/glucoseColor';
-import { OutcomeBadge } from '../components/OutcomeBadge';
-import { AveragedStatsPanel } from '../components/AveragedStatsPanel';
+import { computeMatchingKey } from '../services/classification';
+import { findPatterns, PatternCache } from '../services/patternMatching';
+import type { PatternResult } from '../services/patternMatching';
+import { PatternView } from '../components/PatternView';
 import { MealBottomSheet } from '../components/MealBottomSheet';
 import { applyLateEntryTime } from '../utils/lateEntry';
 import { parseCarbsGrams } from '../utils/parseCarbsGrams';
@@ -62,10 +58,9 @@ export default function MealLogScreen() {
   // AI consent modal state
   const [showAIConsent, setShowAIConsent] = useState(false);
 
-  // Live matching state (Phase 3)
-  const [liveMatches, setLiveMatches] = useState<SessionMatch[]>([]);
-  const [matchSummary, setMatchSummary] = useState<MatchSummary | null>(null);
-  const [allMatchedSessions, setAllMatchedSessions] = useState<SessionWithMeals[]>([]);
+  // Pattern matching state (Phase K — Section 8.4)
+  const [patternResult, setPatternResult] = useState<PatternResult | null>(null);
+  const [patternCache] = useState(() => new PatternCache());
 
   // Equipment stamp chip state (Phase 8 — B2B-05)
   const [activeInsulinBrand, setActiveInsulinBrand] = useState<string | null>(null);
@@ -88,52 +83,31 @@ export default function MealLogScreen() {
       .catch(() => {});
   }, []);
 
-  // Debounced live matching — fires 400ms after mealName changes
+  // Debounced pattern matching — fires 400ms after mealName changes (Phase K, Section 8.4)
   useEffect(() => {
     const trimmed = mealName.trim();
 
     if (trimmed.length < 3) {
-      setLiveMatches([]);
-      setMatchSummary(null);
-      setAllMatchedSessions([]);
+      setPatternResult(null);
       return;
     }
     const timer = setTimeout(async () => {
       try {
-        const allSessions = await loadSessionsWithMeals();
-        const query = trimmed.toLowerCase();
-        const fp = getMealFingerprint(trimmed);
-
-        // Predictive display: substring match after 3+ chars, newest-first
-        const displayMatches = allSessions
-          .filter(s => s.meals.some(m => m.name.toLowerCase().includes(query)))
-          .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-
-        setAllMatchedSessions(displayMatches);
-
-        // AveragedStatsPanel: exact fingerprint match, completed curves only
-        const matched = fp
-          ? allSessions
-              .filter(s =>
-                s.glucoseResponse !== null &&
-                !s.glucoseResponse.isPartial &&
-                s.meals.some(m => getMealFingerprint(m.name) === fp)
-              )
-              .slice(0, 5)
-              .map(s => ({ session: s, score: 1 as number }))
-          : [];
-        setLiveMatches(matched);
-
-        if (matched.length >= 2) {
-          const summary = findSimilarSessions(matched[0].session, allSessions);
-          setMatchSummary(summary);
-        } else {
-          setMatchSummary(null);
+        const matchingKey = computeMatchingKey(trimmed);
+        if (!matchingKey) {
+          setPatternResult(null);
+          return;
         }
+        const [allMeals, allSessions] = await Promise.all([
+          loadMeals(),
+          loadSessionsWithMeals(),
+        ]);
+        const result = findPatterns(matchingKey, allMeals, allSessions, {
+          cache: patternCache,
+        });
+        setPatternResult(result);
       } catch {
-        setLiveMatches([]);
-        setMatchSummary(null);
-        setAllMatchedSessions([]);
+        setPatternResult(null);
       }
     }, 400);
     return () => clearTimeout(timer);
@@ -352,71 +326,8 @@ export default function MealLogScreen() {
           returnKeyType="next"
         />
 
-        {/* Averaged stats panel — appears above live match list when >= 2 matches */}
-        <AveragedStatsPanel summary={matchSummary} />
-
-        {/* Live match list — appears below meal name input when matches exist */}
-        {allMatchedSessions.length > 0 && (
-          <View style={styles.liveMatchContainer}>
-            {allMatchedSessions.slice(0, 5).map((session, index) => {
-              const sessionInsulin = session.meals.reduce(
-                (sum, m) => sum + (m.insulinUnits ?? 0), 0
-              );
-              const firstName = session.meals[0]?.name ?? '';
-              const dateStr = new Date(session.startedAt).toLocaleDateString('en-GB', {
-                weekday: 'short', day: 'numeric', month: 'short',
-              });
-              const badge = classifyOutcome(session.glucoseResponse);
-              const gr = session.glucoseResponse;
-              const isHypo = badge === 'HYPO';
-              const peakOrLow = gr
-                ? isHypo
-                  ? Math.min(...gr.readings.map(r => r.mmol))
-                  : gr.peakGlucose
-                : null;
-              const rowConfidenceLow = session.confidence !== 'high';
-
-              return (
-                <Pressable
-                  key={session.id}
-                  style={[styles.liveMatchRow, index > 0 && styles.liveMatchRowDivider]}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setSheetSessions(allMatchedSessions);
-                    setSheetVisible(true);
-                  }}
-                  hitSlop={8}
-                >
-                  <View style={styles.liveMatchRowPrimary}>
-                    <Text style={styles.liveMatchRowName} numberOfLines={1}>
-                      {firstName} — {sessionInsulin}u
-                    </Text>
-                    <Text style={styles.liveMatchRowDate}>{dateStr}</Text>
-                    {peakOrLow !== null && (
-                      <Text style={[styles.liveMatchRowPeak, { color: glucoseColor(peakOrLow) }]}>
-                        {isHypo ? 'low' : 'peak'} {peakOrLow.toFixed(1)} mmol/L
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.liveMatchBadgeRow}>
-                    <OutcomeBadge badge={badge} size="small" />
-                    {badge === 'GREEN' && (
-                      <View style={styles.wentWellIndicator}>
-                        <View style={styles.wentWellDot} />
-                        <Text style={styles.wentWellText}>Went well</Text>
-                      </View>
-                    )}
-                  </View>
-                  {rowConfidenceLow && (
-                    <Text style={styles.liveMatchConfidenceWarning}>
-                      Other meals may have affected these results
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
+        {/* Pattern view — Phase K (Section 8.4) */}
+        <PatternView result={patternResult} />
 
         {/* Insulin units */}
         <View style={styles.insulinLabelRow}>
@@ -612,81 +523,12 @@ const styles = StyleSheet.create({
     fontSize: 17, padding: 16, borderRadius: 12, marginBottom: 24,
   },
 
-  // Live matching styles (Phase 3)
-  liveMatchContainer: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  liveMatchRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 4,
-  },
-  liveMatchRowDivider: {
-    borderTopWidth: 1,
-    borderTopColor: '#2C2C2E',
-  },
-  liveMatchRowPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  liveMatchRowName: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    flex: 1,
-    minWidth: 0,
-  },
-  liveMatchRowDate: {
-    fontSize: 12,
-    color: '#636366',
-  },
-  liveMatchRowPeak: {
-    fontSize: 12,
-    // color applied inline via glucoseColor()
-  },
-  liveMatchBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
-  },
-  wentWellIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  wentWellDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#30D158',
-  },
-  wentWellText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#30D158',
-  },
-  liveMatchConfidenceWarning: {
-    fontSize: 11,
-    color: '#636366',
-    fontStyle: 'italic',
-  },
   insulinLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 4,
   },
-  insulinHintText: {
-    fontSize: 12,
-    color: '#636366',
-    fontStyle: 'italic',
-  },
-
   // Equipment stamp chip (B2B-05) — read-only, shown below insulin units input
   insulinBrandChip: {
     alignSelf: 'flex-start',
